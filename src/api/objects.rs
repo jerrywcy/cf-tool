@@ -7,7 +7,7 @@ use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 
 /// Represents a Codeforces user.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     /// String. Codeforces user handle.
     pub handle: String,
@@ -50,7 +50,7 @@ pub struct User {
 }
 
 /// Represents a Codeforces blog entry. May be in either short or full version.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlogEntry {
     /// Integer
     pub id: i32,
@@ -77,7 +77,7 @@ pub struct BlogEntry {
 }
 
 /// Represents a comment.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Comment {
     /// Integer.
     pub id: i32,
@@ -96,7 +96,7 @@ pub struct Comment {
 }
 
 /// Represents a recent action.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RecentAction {
     /// Integer. Action time, in unix format.
     pub timeSeconds: i64,
@@ -107,7 +107,7 @@ pub struct RecentAction {
 }
 
 /// Represents a participation of user in rated contest.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RatingChange {
     /// Integer.
     pub contestId: i32,
@@ -126,7 +126,7 @@ pub struct RatingChange {
 }
 
 /// Scoring system used for a [`Contest`].
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ContestType {
     CF,
     IOI,
@@ -134,7 +134,7 @@ pub enum ContestType {
 }
 
 /// The phase a [`Contest`] is in.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ContestPhase {
     BEFORE,
     CODING,
@@ -144,7 +144,7 @@ pub enum ContestPhase {
 }
 
 /// Represents a contest on Codeforces.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Contest {
     /// Integer.
     pub id: i32,
@@ -183,7 +183,7 @@ pub struct Contest {
 }
 
 /// Type of participant in a [`Party`].
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ParticipantType {
     CONTESTANT,
     PRACTICE,
@@ -193,7 +193,7 @@ pub enum ParticipantType {
 }
 
 /// Represents a party, participating in a contest.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Party {
     /// Integer. Can be absent. Id of the contest, in which party is participating.
     pub contestId: Option<i32>,
@@ -214,7 +214,7 @@ pub struct Party {
 }
 
 /// Represents a member of a party.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Member {
     /// String. Codeforces user handle.
     pub handle: String,
@@ -223,14 +223,14 @@ pub struct Member {
 }
 
 /// Type of a [`Problem`].
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ProblemType {
     PROGRAMMING,
     QUESTION,
 }
 
 /// Represents a problem.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Problem {
     /// Integer. Can be absent. Id of the contest, containing the problem.
     pub contestId: Option<i32>,
@@ -251,7 +251,7 @@ pub struct Problem {
 }
 
 /// Represents a statistic data about a problem.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProblemStatistics {
     /// Integer. Can be absent. Id of the contest, containing the problem.
     pub contestId: Option<i32>,
@@ -262,7 +262,7 @@ pub struct ProblemStatistics {
 }
 
 /// Verdict of a [`Submission`].
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum SubmissionVerdict {
     FAILED,
     OK,
@@ -312,7 +312,7 @@ impl Display for SubmissionVerdict {
 }
 
 /// Testset used for judging a [`Submission`].
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum SubmissionTestset {
     SAMPLES,
     PRETESTS,
@@ -331,7 +331,7 @@ pub enum SubmissionTestset {
 }
 
 /// Represents a submission.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Submission {
     /// Integer.
     pub id: i32,
@@ -362,7 +362,7 @@ pub struct Submission {
 }
 
 /// Verdict of a [`Hack`].
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum HackVerdict {
     HACK_SUCCESSFUL,
     HACK_UNSUCCESSFUL,
@@ -375,7 +375,7 @@ pub enum HackVerdict {
 }
 
 /// Judge protocol used for a [`Hack`].
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HackJudgeProtocol {
     /// If manual is "true" then test for the hack was entered manually.
     pub manual: bool,
@@ -386,7 +386,7 @@ pub struct HackJudgeProtocol {
 }
 
 /// Represents a hack, made during Codeforces Round.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Hack {
     /// Integer.
     pub id: i32,
@@ -407,7 +407,7 @@ pub struct Hack {
 }
 
 /// Represents a ranklist row.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RanklistRow {
     /// [`Party`] object. Party that took a corresponding place in the contest.
     pub party: Party,
@@ -429,14 +429,14 @@ pub struct RanklistRow {
 
 /// Type of a [`ProblemResult`].
 /// If type is PRELIMINARY then points can decrease (if, for example, solution will fail during system test). Otherwise, party can only increase points for this problem by submitting better solutions.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ProblemResultType {
     PRELIMINARY,
     FINAL,
 }
 
 /// Represents a submissions results of a party for a problem.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProblemResult {
     /// Floating point number.
     pub points: f32,
@@ -450,14 +450,14 @@ pub struct ProblemResult {
     pub bestSubmissionTimeSeconds: Option<i64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Standings {
     pub contest: Contest,
     pub problems: Vec<Problem>,
     pub rows: Vec<RanklistRow>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProblemSet {
     pub problems: Vec<Problem>,
     pub problemStatistics: Vec<ProblemStatistics>,

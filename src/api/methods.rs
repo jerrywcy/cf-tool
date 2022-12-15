@@ -3,22 +3,21 @@
 //! Reference: [Codeforces Official API Documentation - Return objects](https://codeforces.com/apiHelp/methods)
 
 use color_eyre::{
-    eyre::{Error, WrapErr},
+    eyre::{bail, WrapErr},
     Result,
 };
 use lazy_static::lazy_static;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 
 use crate::settings::SETTINGS;
 
 use super::{
-    error::ApiError,
     objects::{
         BlogEntry, Comment, Contest, Hack, ProblemSet, RatingChange, RecentAction, Standings,
         Submission, User,
     },
-    utils::{get_authorize, CFApiResponse, CFApiUrl},
+    utils::{get_authorize, CFApiResponse, CFApiResponseStatus, CFApiUrl},
 };
 
 lazy_static! {
@@ -32,42 +31,35 @@ async fn request<T>(url: String) -> Result<T>
 where
     T: for<'a> Deserialize<'a>,
 {
-    let request_error_message = format!("Error occured when making a POST request to {url}");
+    let request_error_message = format!("Error occured when making a POST request");
     let response = CLIENT
         .get(url)
         .send()
         .await
         .wrap_err(request_error_message)?;
-    let json_error_message =
-        format!("Failed to parse {response:#?} into CFApiResponse<Vec<Comment>>");
+    let status_code = response.status();
+    if status_code != StatusCode::OK {
+        bail!("Server returned status: {status_code}");
+    }
+    let json_error_message = format!(
+        "Failed to parse\n{:#?}\ninto CFApiResponse<Vec<Comment>>",
+        response
+    );
     let response = response
         .json::<CFApiResponse<T>>()
         .await
         .wrap_err(json_error_message)?;
-    match response.status.as_str() {
-        "OK" => {
-            if let None = response.result {
-                Err(Error::new(ApiError {
-                    comment: "Server returned status OK with no result".to_string(),
-                }))
-            } else {
-                Ok(response.result.unwrap())
+    match response.status {
+        CFApiResponseStatus::OK => match response.result {
+            Some(result) => Ok(result),
+            None => bail!("Server returned status OK with no result"),
+        },
+        CFApiResponseStatus::FAILED => match response.comment {
+            Some(comment) => {
+                bail!("Server returned status FAILED with the following comment:\n{comment}")
             }
-        }
-        "FAILED" => {
-            if let None = response.comment {
-                Err(Error::new(ApiError {
-                    comment: "Server return status FAILED with no comment".to_string(),
-                }))
-            } else {
-                Err(Error::new(ApiError {
-                    comment: response.comment.unwrap(),
-                }))
-            }
-        }
-        _ => Err(Error::new(ApiError {
-            comment: "Server returned unpredicted status.".to_string(),
-        })),
+            None => bail!("Server return status FAILED with no comment"),
+        },
     }
 }
 

@@ -111,11 +111,18 @@ impl CFApiUrl {
     }
 }
 
+/// Represent the status of a given response
+#[derive(Debug, Deserialize, Serialize)]
+pub enum CFApiResponseStatus {
+    OK,
+    FAILED,
+}
+
 /// Represent response by CodeForces API
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CFApiResponse<T> {
     /// either "OK" or "FAILED"
-    pub status: String,
+    pub status: CFApiResponseStatus,
     /// only available when [`status`] is "OK"
     pub result: Option<T>,
     /// only available when [`status`] is "FAILED"

@@ -1,11 +1,5 @@
 use thiserror::Error;
 
-#[derive(Debug, Error)]
-#[error("{comment}")]
-pub struct ApiError {
-    pub comment: String,
-}
-
 #[derive(Debug, Error, PartialEq)]
 #[error(
     "Authorization failed due to {missing} missing.\

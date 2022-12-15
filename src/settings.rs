@@ -69,13 +69,13 @@ mod tests {
     #[test]
     fn config_normal() {
         let config = Config::builder().build().unwrap();
-        let settings = deserialize_config_into_settings(config).unwrap();
+        let _settings = deserialize_config_into_settings(config).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn config_missing() {
         let config = Config::builder().build().unwrap();
-        let settings = deserialize_config_into_settings(config).unwrap();
+        let _settings = deserialize_config_into_settings(config).unwrap();
     }
 }
