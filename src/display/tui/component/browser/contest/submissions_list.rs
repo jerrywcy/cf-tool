@@ -2,8 +2,10 @@ use std::sync::{Arc, Mutex};
 
 use bytesize::ByteSize;
 use chrono::prelude::*;
-use color_eyre::{eyre::bail, Result};
-
+use color_eyre::{
+    eyre::{bail, eyre},
+    Result,
+};
 
 use lazy_static::lazy_static;
 use tuirealm::{
@@ -19,13 +21,16 @@ use crate::{
     api::{
         methods::contest_status,
         objects::{Contest, Submission, SubmissionVerdict},
+        utils::BASEURL,
     },
     display::tui::{
         app::POPUP,
         base_component::Table,
         event::AppEvent,
         msg::ComponentMsg,
-        utils::{is_down_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key},
+        utils::{
+            is_down_key, is_enter_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key,
+        },
         view::PopupView,
         BaseComponent, Component,
     },
@@ -43,6 +48,10 @@ impl Component for SubmissionsList {
     fn on(&mut self, event: &AppEvent) -> Result<ComponentMsg> {
         let mut component = match self.component.try_lock() {
             Ok(component) => component,
+            Err(_err) => return Ok(ComponentMsg::Locked),
+        };
+        let submissions = match self.submissions.try_lock() {
+            Ok(submissions) => submissions,
             Err(_err) => return Ok(ComponentMsg::Locked),
         };
         match *event {
@@ -64,8 +73,25 @@ impl Component for SubmissionsList {
             }
             AppEvent::Key(evt) if is_refresh_key(evt) => {
                 drop(component);
+                drop(submissions);
                 self.update()?;
                 Ok(ComponentMsg::Update)
+            }
+            AppEvent::Key(evt) if is_enter_key(evt) => {
+                let index = component.selected();
+                let id = submissions
+                    .get(index)
+                    .ok_or(eyre!(
+                        "No such index: {index}\nCommonly this is a problem of the application."
+                    ))?
+                    .id
+                    .clone();
+                drop(component);
+                drop(submissions);
+                let contest_id = self.contest.id;
+                let url = format!("{BASEURL}contest/{contest_id}/submission/{id}");
+                webbrowser::open(url.as_str())?;
+                Ok(ComponentMsg::Opened(url))
             }
             _ => Ok(ComponentMsg::None),
         }

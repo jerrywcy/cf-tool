@@ -6,6 +6,7 @@ pub enum ComponentMsg {
     EnterNewView(Box<dyn View>),
     ExitCurrentView,
     ChangeToTab(usize),
+    Opened(String),
     Locked,
     Update,
     None,

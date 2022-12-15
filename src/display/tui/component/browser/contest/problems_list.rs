@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use color_eyre::Result;
+use color_eyre::{eyre::eyre, Result};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use lazy_static::lazy_static;
@@ -20,6 +20,7 @@ use crate::{
     api::{
         methods::{contest_standings, contest_status},
         objects::{Contest, Problem, SubmissionVerdict},
+        utils::BASEURL,
     },
     display::tui::{
         app::POPUP,
@@ -27,7 +28,7 @@ use crate::{
         event::AppEvent,
         msg::ComponentMsg,
         types::TextSpans,
-        utils::{is_scroll_down, is_scroll_up},
+        utils::{is_enter_key, is_scroll_down, is_scroll_up},
         view::PopupView,
         BaseComponent, Component,
     },
@@ -65,6 +66,10 @@ impl Component for ProblemsList {
             Ok(component) => component,
             Err(_err) => return Ok(ComponentMsg::Locked),
         };
+        let problems = match self.problems.try_lock() {
+            Ok(problems) => problems,
+            Err(_err) => return Ok(ComponentMsg::Locked),
+        };
         match *event {
             AppEvent::Key(evt) if is_up_key(evt) => {
                 component.prev();
@@ -84,8 +89,25 @@ impl Component for ProblemsList {
             }
             AppEvent::Key(evt) if is_refresh_key(evt) => {
                 drop(component);
+                drop(problems);
                 self.update()?;
                 Ok(ComponentMsg::Update)
+            }
+            AppEvent::Key(evt) if is_enter_key(evt) => {
+                let index = component.selected();
+                let index = problems
+                    .get(index)
+                    .ok_or(eyre!(
+                        "No such index: {index}\nCommonly this is a problem of the application."
+                    ))?
+                    .index
+                    .clone();
+                drop(component);
+                drop(problems);
+                let contest_id = self.contest.id;
+                let url = format!("{BASEURL}contest/{contest_id}/problem/{index}");
+                webbrowser::open(url.as_str())?;
+                Ok(ComponentMsg::Opened(url))
             }
             _ => Ok(ComponentMsg::None),
         }
@@ -158,14 +180,14 @@ async fn update(
         .into_iter()
         .map(|(index, name, status)| {
             vec![
-                TextSpan::new(index).fg(Color::White),
-                TextSpan::new(name).fg(Color::White),
+                TextSpan::new(index),
+                TextSpan::new(name),
                 if status == "Accepted" {
                     TextSpan::new("Accepted").fg(Color::Green)
                 } else if status == "Rejected" {
                     TextSpan::new("Rejected").fg(Color::Red)
                 } else {
-                    TextSpan::new("")
+                    TextSpan::new("Unrated").fg(Color::DarkGray)
                 },
             ]
             .into_iter()

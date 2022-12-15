@@ -26,8 +26,7 @@ use crate::{
         event::AppEvent,
         msg::ComponentMsg,
         utils::{
-            is_down_key, is_enter_key, is_refresh_key, is_scroll_down, is_scroll_up,
-            is_up_key,
+            is_down_key, is_enter_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key,
         },
         view::{ContestBrowser, PopupView},
         BaseComponent, Component,
@@ -77,7 +76,9 @@ impl Component for ContestList {
                 let index = component.selected();
                 let contest = contests
                     .get(index)
-                    .ok_or(eyre!("No such index in contest ids: {index}"))?
+                    .ok_or(eyre!(
+                        "No such index: {index}.\nCommonly this is a problem of the application."
+                    ))?
                     .clone();
                 Ok(ComponentMsg::EnterNewView(Box::new(ContestBrowser::new(
                     contest,

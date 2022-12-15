@@ -1,7 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use color_eyre::Result;
-
+use color_eyre::{eyre::eyre, Result};
 
 use lazy_static::lazy_static;
 use tuirealm::{
@@ -14,13 +13,15 @@ use tuirealm::{
 };
 
 use crate::{
-    api::{methods::problemset_problems, objects::Problem},
+    api::{methods::problemset_problems, objects::Problem, utils::BASEURL},
     display::tui::{
         app::POPUP,
         base_component::Table,
         event::AppEvent,
         msg::ComponentMsg,
-        utils::{is_down_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key},
+        utils::{
+            is_down_key, is_enter_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key,
+        },
         view::PopupView,
         BaseComponent, Component,
     },
@@ -36,6 +37,10 @@ impl Component for ProblemsetList {
     fn on(&mut self, event: &AppEvent) -> Result<ComponentMsg> {
         let mut component = match self.component.try_lock() {
             Ok(component) => component,
+            Err(_err) => return Ok(ComponentMsg::Locked),
+        };
+        let problems = match self.problems.try_lock() {
+            Ok(problems) => problems,
             Err(_err) => return Ok(ComponentMsg::Locked),
         };
         match *event {
@@ -57,8 +62,22 @@ impl Component for ProblemsetList {
             }
             AppEvent::Key(evt) if is_refresh_key(evt) => {
                 drop(component);
+                drop(problems);
                 self.update()?;
                 Ok(ComponentMsg::Update)
+            }
+            AppEvent::Key(evt) if is_enter_key(evt) => {
+                let index = component.selected();
+                let problem = problems.get(index).ok_or(eyre!(
+                    "No such index: {index}\nCommonly this is a problem of the application."
+                ))?;
+                let index = problem.index.clone();
+                let url = match problem.contestId {
+                    Some(contest_id) => format!("{BASEURL}problemset/problem/{contest_id}/{index}"),
+                    None => format!("{BASEURL}acmsguru/problem/99999/{index}"),
+                };
+                webbrowser::open(url.as_str())?;
+                Ok(ComponentMsg::Opened(url))
             }
             _ => Ok(ComponentMsg::None),
         }
