@@ -10,7 +10,7 @@ use duration_human::DurationHuman;
 
 use lazy_static::lazy_static;
 use tuirealm::{
-    props::{Alignment, Color, TextSpan},
+    props::{Alignment, BorderType, Color, TextSpan},
     tui::{
         layout::{Constraint, Rect},
         widgets::{Block, Borders, Paragraph},
@@ -208,7 +208,11 @@ impl ContestList {
                 .collect::<String>()
         );
         let loading = Paragraph::new(loading_message)
-            .block(Block::default().borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
             .alignment(Alignment::Center);
         frame.render_widget(loading, area);
     }

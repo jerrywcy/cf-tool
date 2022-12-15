@@ -8,7 +8,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use lazy_static::lazy_static;
 use tuirealm::{
-    props::{Alignment, Color, TextSpan},
+    props::{Alignment, BorderType, Color, TextSpan},
     tui::{
         layout::{Constraint, Rect},
         widgets::{Block, Borders, Paragraph},
@@ -187,7 +187,7 @@ async fn update(
                 } else if status == "Rejected" {
                     TextSpan::new("Rejected").fg(Color::Red)
                 } else {
-                    TextSpan::new("Unrated").fg(Color::DarkGray)
+                    TextSpan::new("Unrated").fg(Color::Gray)
                 },
             ]
             .into_iter()
@@ -253,7 +253,11 @@ impl ProblemsList {
                 .collect::<String>()
         );
         let loading = Paragraph::new(loading_message)
-            .block(Block::default().borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
             .alignment(Alignment::Center);
         frame.render_widget(loading, area);
     }

@@ -1,7 +1,7 @@
 use color_eyre::{eyre::bail, Result};
 use lazy_static::lazy_static;
 use tuirealm::{
-    props::{Color, Style},
+    props::{BorderType, Color, Style},
     tui::{
         layout::Rect,
         style::Modifier,
@@ -28,7 +28,11 @@ impl BaseComponent for Tabs {
     fn render(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let titles = self.titles.iter().map(|text| text.into()).collect();
         let tabs = widgets::Tabs::new(titles)
-            .block(Block::default().borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
             .select(self.index)
             .style(TABS_STYLE.clone())
             .highlight_style(TABS_HIGHLIGHT_STYLE.clone());

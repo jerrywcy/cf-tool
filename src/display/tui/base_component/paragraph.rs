@@ -1,5 +1,5 @@
 use tuirealm::{
-    props::{Alignment, Color, Style},
+    props::{Alignment, BorderType},
     tui::{
         layout::Rect,
         text::Spans,
@@ -24,8 +24,12 @@ impl BaseComponent for Paragraph {
         let text: Spans = self.text.clone().into();
         let title: Spans = self.title.clone().into();
         let paragraph = TuiParagraph::new(text)
-            .block(Block::default().borders(Borders::ALL).title(title))
-            .style(Style::default().fg(Color::White))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .title(title),
+            )
             .alignment(Alignment::Left)
             .wrap(Wrap { trim: false });
         frame.render_widget(paragraph, area);

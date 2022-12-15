@@ -1,5 +1,5 @@
 use tuirealm::{
-    props::{Style, TextSpan},
+    props::{Color, Style, TextSpan},
     tui::{
         text::{Span, Spans},
         widgets::Cell,
@@ -22,6 +22,16 @@ impl TextSpans {
                 .unwrap_or(0);
         });
         height
+    }
+}
+
+impl TextSpans {
+    pub fn fg(self, color: Color) -> Self {
+        Self(self.0.into_iter().map(|text| text.fg(color)).collect())
+    }
+
+    pub fn bg(self, color: Color) -> Self {
+        Self(self.0.into_iter().map(|text| text.bg(color)).collect())
     }
 }
 

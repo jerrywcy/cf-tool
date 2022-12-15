@@ -1,9 +1,10 @@
 use lazy_static::lazy_static;
 use tuirealm::{
-    props::Color,
+    props::{BorderType, Color},
     tui::{
         layout::{Constraint, Rect},
         style::{Modifier, Style},
+        text::Spans,
         widgets::{self, Block, Borders, Row, TableState},
     },
     Frame,
@@ -28,7 +29,12 @@ lazy_static! {
 
 impl BaseComponent for Table {
     fn render(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let header = Row::new(self.header.clone())
+        let header: Vec<Spans> = self
+            .header
+            .iter()
+            .map(|text| text.clone().bg(Color::Magenta).into())
+            .collect();
+        let header = Row::new(header)
             .style(Style::default().bg(Color::Magenta))
             .height(
                 self.header
@@ -45,7 +51,12 @@ impl BaseComponent for Table {
         let title = self.title.clone();
         let table = widgets::Table::new(rows)
             .header(header)
-            .block(Block::default().borders(Borders::ALL).title(title))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .title(title),
+            )
             .widths(&self.widths)
             .highlight_style(TABLE_HIGHLIGHT_STYLE.clone());
         frame.render_stateful_widget(table, area, &mut self.state);

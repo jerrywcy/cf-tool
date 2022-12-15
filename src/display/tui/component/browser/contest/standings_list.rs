@@ -2,10 +2,9 @@ use std::sync::{Arc, Mutex};
 
 use color_eyre::Result;
 
-
 use lazy_static::lazy_static;
 use tuirealm::{
-    props::{Alignment, Color, TextSpan},
+    props::{Alignment, BorderType, Color, TextSpan},
     tui::{
         layout::{Constraint, Rect},
         widgets::{Block, Borders, Paragraph},
@@ -116,14 +115,11 @@ async fn update(
                 .map(|member| member.handle)
                 .collect::<Vec<String>>()
                 .join(",");
-            let mut ret = vec![
-                TextSpan::new(rank.to_string()).fg(Color::White),
-                TextSpan::new(handles).fg(Color::White),
-            ];
+            let mut ret = vec![TextSpan::new(rank.to_string()), TextSpan::new(handles)];
 
             let results = row.problemResults;
             for ProblemResult { points, .. } in results {
-                ret.push(TextSpan::new(format!("{points:.0}")).fg(Color::White));
+                ret.push(TextSpan::new(format!("{points:.0}")));
             }
 
             ret.into_iter().map(|text| text.into()).collect()
@@ -189,7 +185,11 @@ impl StandingsList {
                 .collect::<String>()
         );
         let loading = Paragraph::new(loading_message)
-            .block(Block::default().borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
             .alignment(Alignment::Center);
         frame.render_widget(loading, area);
     }

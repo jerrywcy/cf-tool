@@ -9,7 +9,7 @@ use color_eyre::{
 
 use lazy_static::lazy_static;
 use tuirealm::{
-    props::{Alignment, Color, TextSpan},
+    props::{Alignment, BorderType, Color, TextSpan},
     tui::{
         layout::{Constraint, Rect},
         widgets::{Block, Borders, Paragraph},
@@ -173,11 +173,11 @@ async fn update(
             );
 
             vec![
-                TextSpan::new(when).fg(Color::White),
-                TextSpan::new(name).fg(Color::White),
+                TextSpan::new(when),
+                TextSpan::new(name),
                 verdict,
-                TextSpan::new(time_consumed).fg(Color::White),
-                TextSpan::new(memory_consumed).fg(Color::White),
+                TextSpan::new(time_consumed),
+                TextSpan::new(memory_consumed),
             ]
         })
         .collect();
@@ -239,7 +239,11 @@ impl SubmissionsList {
                 .collect::<String>()
         );
         let loading = Paragraph::new(loading_message)
-            .block(Block::default().borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            )
             .alignment(Alignment::Center);
         frame.render_widget(loading, area);
     }
