@@ -120,7 +120,11 @@ impl Table {
                 if i + 1 < self.items.len() {
                     i + 1
                 } else {
-                    self.items.len() - 1
+                    if self.items.len() == 0 {
+                        0
+                    } else {
+                        self.items.len() - 1
+                    }
                 }
             }
             None => 0,

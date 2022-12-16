@@ -1,9 +1,12 @@
-use color_eyre::Result;
-use crossterm::event::{self, Event as CrosstermEvent, EventStream, KeyEvent, MouseEvent};
-use std::time::{Duration, Instant};
-use tokio::{select, sync::mpsc, task, time::sleep};
+use crossterm::event::{Event as CrosstermEvent, EventStream, KeyEvent, MouseEvent};
+use std::{
+    sync::mpsc::{self, RecvError},
+    time::Duration,
+};
+use tokio::{select, task, time::sleep};
 use tokio_stream::StreamExt;
 
+#[derive(Debug)]
 pub enum AppEvent {
     FocusGained,
     FocusLost,
@@ -15,25 +18,25 @@ pub enum AppEvent {
 }
 
 #[allow(dead_code)]
-pub struct EventHandler {
+pub struct EventListener {
     sender: mpsc::Sender<AppEvent>,
     receiver: mpsc::Receiver<AppEvent>,
     handler: task::JoinHandle<()>,
 }
 
-impl EventHandler {
-    pub async fn new(tick_rate: u64) -> Self {
+impl EventListener {
+    pub fn new(tick_rate: u64) -> Self {
         let tick_rate = Duration::from_millis(tick_rate);
-        let (sender, receiver) = mpsc::channel(100);
+        let (sender, receiver) = mpsc::channel();
         let handler = {
             let sender = sender.clone();
             tokio::spawn(async move {
                 let mut reader = EventStream::new();
                 loop {
-                    let mut delay = sleep(tick_rate);
-                    let mut event = reader.next();
+                    let delay = sleep(tick_rate);
+                    let event = reader.next();
                     select! {
-                        _ = delay => {sender.send(AppEvent::Tick).await;},
+                        _ = delay => {sender.send(AppEvent::Tick).unwrap();},
                         maybe_event = event => {
                             match maybe_event {
                                 Some(Ok(event)) => {
@@ -46,9 +49,9 @@ impl EventHandler {
                                         CrosstermEvent::Resize(width, height) =>
                                             sender.send(AppEvent::WindowResize(width, height))
 
-                                    }.await;
+                                    }.unwrap();
                                 },
-                                Some(Err(err)) => {},
+                                Some(Err(_err)) => {},
                                 None => {break;},
                             };
                         }
@@ -63,7 +66,7 @@ impl EventHandler {
         }
     }
 
-    pub async fn next(&mut self) -> Result<AppEvent> {
-        Ok(self.receiver.recv().await.unwrap())
+    pub fn next(&mut self) -> Result<AppEvent, RecvError> {
+        self.receiver.recv()
     }
 }

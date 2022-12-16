@@ -1,10 +1,9 @@
-use std::sync::{Arc, Mutex};
-
 use color_eyre::{eyre::eyre, Result};
 
 use lazy_static::lazy_static;
+use std::sync::mpsc;
 use tuirealm::{
-    props::{Alignment, BorderType, Color, TextSpan},
+    props::{Alignment, BorderType},
     tui::{
         layout::{Constraint, Rect},
         widgets::{Block, Borders, Paragraph},
@@ -15,60 +14,57 @@ use tuirealm::{
 use crate::{
     api::{methods::problemset_problems, objects::Problem, utils::BASEURL},
     display::tui::{
-        app::POPUP,
         base_component::Table,
+        component::ComponentSender,
         event::AppEvent,
-        msg::ComponentMsg,
+        msg::{ChannelHandler, ComponentMsg, ViewConstructor},
         utils::{
             is_down_key, is_enter_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key,
         },
-        view::PopupView,
         BaseComponent, Component,
     },
 };
 
+#[derive(Debug, Default)]
+struct UpdateResult {
+    problems: Vec<Problem>,
+    items: Vec<Vec<String>>,
+}
+
 pub struct ProblemsetList {
-    problems: Arc<Mutex<Vec<Problem>>>,
-    component: Arc<Mutex<Table>>,
-    updating: Arc<Mutex<bool>>,
+    sender: ComponentSender,
+    handler: ChannelHandler<UpdateResult>,
+    problems: Vec<Problem>,
+    component: Table,
+    updating: u32,
 }
 
 impl Component for ProblemsetList {
-    fn on(&mut self, event: &AppEvent) -> Result<ComponentMsg> {
-        let mut component = match self.component.try_lock() {
-            Ok(component) => component,
-            Err(_err) => return Ok(ComponentMsg::Locked),
-        };
-        let problems = match self.problems.try_lock() {
-            Ok(problems) => problems,
-            Err(_err) => return Ok(ComponentMsg::Locked),
-        };
+    fn on(&mut self, event: &AppEvent) -> Result<()> {
         match *event {
             AppEvent::Key(evt) if is_up_key(evt) => {
-                component.prev();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.prev();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Mouse(evt) if is_scroll_up(evt) => {
-                component.prev();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.prev();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Key(evt) if is_down_key(evt) => {
-                component.next();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.next();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Mouse(evt) if is_scroll_down(evt) => {
-                component.next();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.next();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Key(evt) if is_refresh_key(evt) => {
-                drop(component);
-                drop(problems);
-                self.update()?;
-                Ok(ComponentMsg::Update)
+                self.update();
+                self.send(ComponentMsg::Update)?;
             }
             AppEvent::Key(evt) if is_enter_key(evt) => {
-                let index = component.selected();
-                let problem = problems.get(index).ok_or(eyre!(
+                let index = self.component.selected();
+                let problem = self.problems.get(index).ok_or(eyre!(
                     "No such index: {index}\nCommonly this is a problem of the application."
                 ))?;
                 let index = problem.index.clone();
@@ -77,19 +73,18 @@ impl Component for ProblemsetList {
                     None => format!("{BASEURL}acmsguru/problem/99999/{index}"),
                 };
                 webbrowser::open(url.as_str())?;
-                Ok(ComponentMsg::Opened(url))
+                self.send(ComponentMsg::OpenedWebsite(url))?;
             }
-            _ => Ok(ComponentMsg::None),
-        }
+            _ => (),
+        };
+        Ok(())
     }
 
     fn render(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        match self.updating.try_lock() {
-            Ok(updating) if *updating == false => match self.component.try_lock() {
-                Ok(mut component) => component.render(frame, area),
-                Err(_err) => self.render_loading(frame, area),
-            },
-            _ => self.render_loading(frame, area),
+        if self.updating == 0 {
+            self.component.render(frame, area);
+        } else {
+            self.render_loading(frame, area);
         }
     }
 }
@@ -107,17 +102,6 @@ lazy_static! {
     ];
 }
 
-impl Default for ProblemsetList {
-    fn default() -> Self {
-        let table = Table::new(DEFAULT_HEADER.clone(), DEFAULT_WIDTHS.clone(), "");
-        Self {
-            problems: Arc::new(Mutex::new(vec![])),
-            component: Arc::new(Mutex::new(table)),
-            updating: Arc::new(Mutex::new(false)),
-        }
-    }
-}
-
 async fn get_result() -> Result<Vec<Problem>> {
     let problems = problemset_problems(None, None).await?.problems;
     Ok(problems)
@@ -133,53 +117,61 @@ fn format_item(problem: Problem) -> Vec<String> {
     vec![index.to_string(), name, tags]
 }
 
-async fn update(
-    table: Arc<Mutex<Table>>,
-    updating: Arc<Mutex<bool>>,
-    problems: Arc<Mutex<Vec<Problem>>>,
-) -> Result<()> {
+async fn update(sender: mpsc::Sender<UpdateResult>) -> Result<()> {
     let results = get_result().await?;
-    *problems.lock().unwrap() = results.clone();
+    let problems = results.clone();
     let items: Vec<Vec<String>> = results
         .into_iter()
         .map(|problem| format_item(problem))
         .collect();
-    table.lock().unwrap().set_items(items);
-    *updating.lock().unwrap() = false;
+    sender.send(UpdateResult { problems, items }).unwrap();
     Ok(())
 }
 
 impl ProblemsetList {
-    pub fn new() -> Result<Self> {
-        let mut default = ProblemsetList::default();
-        default.update()?;
-        Ok(default)
+    pub fn new(sender: ComponentSender) -> Self {
+        let table = Table::new(DEFAULT_HEADER.clone(), DEFAULT_WIDTHS.clone(), "");
+        let handler = ChannelHandler::new();
+        Self {
+            sender,
+            handler,
+            problems: vec![],
+            component: table,
+            updating: 0,
+        }
     }
 
-    pub fn update(&mut self) -> Result<()> {
-        match self.updating.try_lock() {
-            Ok(mut updating) => *updating = true,
-            Err(_) => return Ok(()),
+    pub fn tick(&mut self) {
+        while let Ok(result) = self.handler.try_next() {
+            let UpdateResult { items, problems } = result;
+            self.component.set_items(items);
+            self.problems = problems;
+            self.updating -= 1;
         }
+    }
 
-        let table = Arc::clone(&self.component);
-        let updating = Arc::clone(&self.updating);
-        let problems = Arc::clone(&self.problems);
-        let popup = Arc::clone(&POPUP);
+    fn send(&mut self, msg: ComponentMsg) -> Result<()> {
+        self.sender.send(msg)?;
+        Ok(())
+    }
+
+    pub fn update(&mut self) -> &mut Self {
+        let update_sender = self.handler.sender.clone();
+        let popup_sender = self.sender.clone();
+        let error_sender = self.handler.sender.clone();
+        self.updating += 1;
         tokio::spawn(async move {
-            if let Err(err) = update(table, updating.clone(), problems).await {
-                if let Ok(mut popup) = popup.lock() {
-                    *popup = Some(PopupView::new(
-                        TextSpan::new("Error from ProblemSet").fg(Color::Red),
+            if let Err(err) = update(update_sender).await {
+                error_sender.send(UpdateResult::default()).unwrap();
+                popup_sender
+                    .send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                        String::from("Error from ProblemSet"),
                         format!("{err:#}"),
-                    ))
-                }
-                if let Ok(mut updating) = updating.try_lock() {
-                    *updating = false;
-                }
+                    )))
+                    .unwrap();
             }
         });
-        Ok(())
+        self
     }
 
     fn render_loading(&self, frame: &mut Frame, area: Rect) {

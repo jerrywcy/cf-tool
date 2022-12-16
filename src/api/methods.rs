@@ -7,7 +7,7 @@ use color_eyre::{
     Result,
 };
 use lazy_static::lazy_static;
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use serde::Deserialize;
 
 use crate::settings::SETTINGS;
@@ -40,11 +40,8 @@ where
         .await
         .wrap_err(request_error_message)?;
     let status_code = response.status();
-    if status_code != StatusCode::OK {
-        bail!("Server returned status: {status_code}");
-    }
     let json_error_message = format!(
-        "Failed to parse\n{:#?}\ninto CFApiResponse<Vec<Comment>>",
+        "Server returned status: {status_code}.\n\nFailed to parse\n{:#?}\ninto CFApiResponse<Vec<Comment>>",
         response
     );
     let response = response

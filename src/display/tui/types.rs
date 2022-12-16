@@ -6,7 +6,7 @@ use tuirealm::{
     },
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TextSpans(Vec<TextSpan>);
 
 impl TextSpans {

@@ -1,10 +1,9 @@
-use std::sync::{Arc, Mutex};
-
 use color_eyre::Result;
 
 use lazy_static::lazy_static;
+use std::sync::mpsc;
 use tuirealm::{
-    props::{Alignment, BorderType, Color, TextSpan},
+    props::{Alignment, BorderType, TextSpan},
     tui::{
         layout::{Constraint, Rect},
         widgets::{Block, Borders, Paragraph},
@@ -18,62 +17,64 @@ use crate::{
         objects::{Contest, ProblemResult},
     },
     display::tui::{
-        app::POPUP,
         base_component::Table,
+        component::ComponentSender,
         event::AppEvent,
-        msg::ComponentMsg,
+        msg::{ChannelHandler, ComponentMsg, ViewConstructor},
         types::TextSpans,
         utils::{is_down_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key},
-        view::PopupView,
         BaseComponent, Component,
     },
 };
 
+#[derive(Debug, Default)]
+struct UpdateResult {
+    items: Vec<Vec<TextSpans>>,
+    header: Vec<String>,
+    widths: Vec<Constraint>,
+}
+
 pub struct StandingsList {
+    sender: ComponentSender,
+    handler: ChannelHandler<UpdateResult>,
     contest: Contest,
-    component: Arc<Mutex<Table>>,
-    updating: Arc<Mutex<bool>>,
+    component: Table,
+    updating: u32,
 }
 
 impl Component for StandingsList {
-    fn on(&mut self, event: &AppEvent) -> Result<ComponentMsg> {
-        let mut component = match self.component.try_lock() {
-            Ok(component) => component,
-            Err(_err) => return Ok(ComponentMsg::Locked),
-        };
+    fn on(&mut self, event: &AppEvent) -> Result<()> {
         match *event {
             AppEvent::Key(evt) if is_up_key(evt) => {
-                component.next();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.next();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Mouse(evt) if is_scroll_up(evt) => {
-                component.prev();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.prev();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Key(evt) if is_down_key(evt) => {
-                component.next();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.next();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Mouse(evt) if is_scroll_down(evt) => {
-                component.next();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.next();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Key(evt) if is_refresh_key(evt) => {
-                drop(component);
-                self.update()?;
-                Ok(ComponentMsg::Update)
+                self.update();
+                self.send(ComponentMsg::Update)?;
             }
-            _ => Ok(ComponentMsg::None),
-        }
+            _ => (),
+        };
+        Ok(())
     }
 
     fn render(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        match self.updating.try_lock() {
-            Ok(updating) if *updating == false => match self.component.try_lock() {
-                Ok(mut component) => component.render(frame, area),
-                Err(_err) => self.render_loading(frame, area),
-            },
-            _ => self.render_loading(frame, area),
+        if self.updating == 0 {
+            self.component.render(frame, area);
+        } else {
+            self.render_loading(frame, area);
         }
     }
 }
@@ -84,11 +85,7 @@ lazy_static! {
         vec![Constraint::Length(5), Constraint::Percentage(50),];
 }
 
-async fn update(
-    contest_id: i32,
-    table: Arc<Mutex<Table>>,
-    updating: Arc<Mutex<bool>>,
-) -> Result<()> {
+async fn update(sender: mpsc::Sender<UpdateResult>, contest_id: i32) -> Result<()> {
     let standings = contest_standings(contest_id, None, None, None, None, Some(true)).await?;
 
     let mut indexes: Vec<String> = standings
@@ -125,55 +122,71 @@ async fn update(
             ret.into_iter().map(|text| text.into()).collect()
         })
         .collect();
-    table
-        .lock()
-        .unwrap()
-        .set_items(items)
-        .set_header(header)
-        .set_widths(widths);
-    *updating.lock().unwrap() = false;
+    sender
+        .send(UpdateResult {
+            items,
+            header,
+            widths,
+        })
+        .unwrap();
     Ok(())
 }
 
 impl StandingsList {
-    pub fn new(contest: Contest) -> Result<Self> {
+    pub fn new(sender: ComponentSender, contest: Contest) -> Self {
         let table = Table::new(
             DEFAULT_HEADER.clone(),
             DEFAULT_WIDTHS.clone(),
             contest.name.clone(),
         );
-        let mut default = Self {
+        let handler = ChannelHandler::new();
+        Self {
+            sender,
+            handler,
             contest,
-            component: Arc::new(Mutex::new(table)),
-            updating: Arc::new(Mutex::new(false)),
-        };
-        default.update()?;
-        Ok(default)
+            component: table,
+            updating: 0,
+        }
     }
 
-    pub fn update(&mut self) -> Result<()> {
-        match self.updating.try_lock() {
-            Ok(mut updating) => *updating = true,
-            Err(_) => return Ok(()),
+    pub fn tick(&mut self) {
+        while let Ok(result) = self.handler.try_next() {
+            let UpdateResult {
+                items,
+                header,
+                widths,
+            } = result;
+            self.component
+                .set_items(items)
+                .set_header(header)
+                .set_widths(widths);
+            self.updating -= 1;
         }
-        let table = Arc::clone(&self.component);
-        let updating = Arc::clone(&self.updating);
+    }
+
+    fn send(&mut self, msg: ComponentMsg) -> Result<()> {
+        self.sender.send(msg)?;
+        Ok(())
+    }
+
+    pub fn update(&mut self) -> &mut Self {
+        let update_sender = self.handler.sender.clone();
+        let popup_sender = self.sender.clone();
+        let error_sender = self.handler.sender.clone();
         let contest_id = self.contest.id;
-        let popup = Arc::clone(&POPUP);
+        self.updating += 1;
         tokio::spawn(async move {
-            if let Err(err) = update(contest_id, table, updating.clone()).await {
-                if let Ok(mut popup) = popup.lock() {
-                    *popup = Some(PopupView::new(
-                        TextSpan::new("Error from Standings").fg(Color::Red),
+            if let Err(err) = update(update_sender, contest_id).await {
+                error_sender.send(UpdateResult::default()).unwrap();
+                popup_sender
+                    .send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                        String::from("Error from Standings"),
                         format!("{err:#}"),
-                    ))
-                }
-            }
-            if let Ok(mut updating) = updating.try_lock() {
-                *updating = false;
+                    )))
+                    .unwrap();
             }
         });
-        Ok(())
+        self
     }
 
     fn render_loading(&self, frame: &mut Frame, area: Rect) {

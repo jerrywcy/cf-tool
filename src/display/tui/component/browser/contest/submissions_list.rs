@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use bytesize::ByteSize;
 use chrono::prelude::*;
 use color_eyre::{
@@ -8,6 +6,7 @@ use color_eyre::{
 };
 
 use lazy_static::lazy_static;
+use std::sync::mpsc;
 use tuirealm::{
     props::{Alignment, BorderType, Color, TextSpan},
     tui::{
@@ -24,86 +23,81 @@ use crate::{
         utils::BASEURL,
     },
     display::tui::{
-        app::POPUP,
         base_component::Table,
+        component::ComponentSender,
         event::AppEvent,
-        msg::ComponentMsg,
+        msg::{ChannelHandler, ComponentMsg, ViewConstructor},
         utils::{
             is_down_key, is_enter_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key,
         },
-        view::PopupView,
         BaseComponent, Component,
     },
     settings::SETTINGS,
 };
 
+#[derive(Debug, Default)]
+struct UpdateResult {
+    items: Vec<Vec<TextSpan>>,
+    submissions: Vec<Submission>,
+}
+
 pub struct SubmissionsList {
+    sender: ComponentSender,
+    handler: ChannelHandler<UpdateResult>,
     contest: Contest,
-    component: Arc<Mutex<Table>>,
-    updating: Arc<Mutex<bool>>,
-    submissions: Arc<Mutex<Vec<Submission>>>,
+    component: Table,
+    updating: u32,
+    submissions: Vec<Submission>,
 }
 
 impl Component for SubmissionsList {
-    fn on(&mut self, event: &AppEvent) -> Result<ComponentMsg> {
-        let mut component = match self.component.try_lock() {
-            Ok(component) => component,
-            Err(_err) => return Ok(ComponentMsg::Locked),
-        };
-        let submissions = match self.submissions.try_lock() {
-            Ok(submissions) => submissions,
-            Err(_err) => return Ok(ComponentMsg::Locked),
-        };
+    fn on(&mut self, event: &AppEvent) -> Result<()> {
         match *event {
             AppEvent::Key(evt) if is_up_key(evt) => {
-                component.prev();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.prev();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Mouse(evt) if is_scroll_up(evt) => {
-                component.prev();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.prev();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Key(evt) if is_down_key(evt) => {
-                component.next();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.next();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Mouse(evt) if is_scroll_down(evt) => {
-                component.next();
-                Ok(ComponentMsg::ChangedTo(component.selected()))
+                self.component.next();
+                self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
             }
             AppEvent::Key(evt) if is_refresh_key(evt) => {
-                drop(component);
-                drop(submissions);
-                self.update()?;
-                Ok(ComponentMsg::Update)
+                self.update();
+                self.send(ComponentMsg::Update)?;
             }
             AppEvent::Key(evt) if is_enter_key(evt) => {
-                let index = component.selected();
-                let id = submissions
+                let index = self.component.selected();
+                let id = self
+                    .submissions
                     .get(index)
                     .ok_or(eyre!(
                         "No such index: {index}\nCommonly this is a problem of the application."
                     ))?
                     .id
                     .clone();
-                drop(component);
-                drop(submissions);
                 let contest_id = self.contest.id;
                 let url = format!("{BASEURL}contest/{contest_id}/submission/{id}");
                 webbrowser::open(url.as_str())?;
-                Ok(ComponentMsg::Opened(url))
+                self.send(ComponentMsg::OpenedWebsite(url))?;
             }
-            _ => Ok(ComponentMsg::None),
-        }
+            _ => (),
+        };
+        Ok(())
     }
 
     fn render(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        match self.updating.try_lock() {
-            Ok(updating) if *updating == false => match self.component.try_lock() {
-                Ok(mut component) => component.render(frame, area),
-                Err(_err) => self.render_loading(frame, area),
-            },
-            _ => self.render_loading(frame, area),
+        if self.updating == 0 {
+            self.component.render(frame, area);
+        } else {
+            self.render_loading(frame, area);
         }
     }
 }
@@ -125,32 +119,30 @@ lazy_static! {
     ];
 }
 
-async fn update(
-    contest_id: i32,
-    table: Arc<Mutex<Table>>,
-    updating: Arc<Mutex<bool>>,
-    submissions: Arc<Mutex<Vec<Submission>>>,
-) -> Result<()> {
+async fn update(sender: mpsc::Sender<UpdateResult>, contest_id: i32) -> Result<()> {
     if let None = SETTINGS.username {
         bail!(
             "No username configured.\
                Please configure your usename."
         );
     }
-    let results = contest_status(contest_id, SETTINGS.username.clone(), None, None).await?;
-    *submissions.lock().unwrap() = results.clone();
+    let submissions = contest_status(contest_id, SETTINGS.username.clone(), None, None).await?;
 
-    let items = results
-        .into_iter()
+    let items: Vec<Vec<TextSpan>> = submissions
+        .iter()
         .map(|submission| {
             let naive = NaiveDateTime::from_timestamp_opt(submission.creationTimeSeconds, 0)
                 .unwrap_or(NaiveDateTime::default());
             let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
             let when = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
 
-            let name = format!("{} - {}", submission.problem.index, submission.problem.name);
+            let name = format!(
+                "{} - {}",
+                submission.problem.index.clone(),
+                submission.problem.name.clone()
+            );
 
-            let verdict = match submission.verdict {
+            let verdict = match submission.verdict.clone() {
                 Some(SubmissionVerdict::OK) => TextSpan::new("Accepted").fg(Color::Green),
                 Some(SubmissionVerdict::TESTING) => TextSpan::new(format!(
                     "Testing on test {}",
@@ -182,52 +174,61 @@ async fn update(
         })
         .collect();
 
-    table.lock().unwrap().set_items(items);
-    *updating.lock().unwrap() = false;
+    sender.send(UpdateResult { items, submissions }).unwrap();
     Ok(())
 }
 
 impl SubmissionsList {
-    pub fn new(contest: Contest) -> Result<Self> {
+    pub fn new(sender: ComponentSender, contest: Contest) -> Self {
         let table = Table::new(
             DEFAULT_HEADER.clone(),
             DEFAULT_WIDTHS.clone(),
             contest.name.clone(),
         );
-        let mut default = SubmissionsList {
+        let handler = ChannelHandler::new();
+        Self {
+            sender,
+            handler,
             contest,
-            component: Arc::new(Mutex::new(table)),
-            updating: Arc::new(Mutex::new(false)),
-            submissions: Arc::new(Mutex::new(vec![])),
-        };
-        default.update()?;
-        Ok(default)
+            component: table,
+            updating: 0,
+            submissions: vec![],
+        }
     }
 
-    pub fn update(&mut self) -> Result<()> {
-        match self.updating.try_lock() {
-            Ok(mut updating) => *updating = true,
-            Err(_) => return Ok(()),
+    pub fn tick(&mut self) {
+        while let Ok(result) = self.handler.try_next() {
+            let UpdateResult { items, submissions } = result;
+            self.component.set_items(items);
+            self.submissions = submissions;
+            self.updating -= 1;
         }
-        let table = Arc::clone(&self.component);
-        let updating = Arc::clone(&self.updating);
+    }
+
+    fn send(&mut self, msg: ComponentMsg) -> Result<()> {
+        self.sender.send(msg)?;
+        Ok(())
+    }
+
+    pub fn update(&mut self) -> &mut Self {
+        let update_sender = self.handler.sender.clone();
+        let popup_sender = self.sender.clone();
+        let error_sender = self.handler.sender.clone();
         let contest_id = self.contest.id;
-        let submissions = Arc::clone(&self.submissions);
-        let popup = Arc::clone(&POPUP);
+        self.updating += 1;
+
         tokio::spawn(async move {
-            if let Err(err) = update(contest_id, table, updating.clone(), submissions).await {
-                if let Ok(mut popup) = popup.lock() {
-                    *popup = Some(PopupView::new(
-                        TextSpan::new("Error from Submission").fg(Color::Red),
+            if let Err(err) = update(update_sender, contest_id).await {
+                error_sender.send(UpdateResult::default()).unwrap();
+                popup_sender
+                    .send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                        String::from("Error from Submission"),
                         format!("{err:#}"),
-                    ))
-                }
-            }
-            if let Ok(mut updating) = updating.try_lock() {
-                *updating = false;
+                    )))
+                    .unwrap();
             }
         });
-        Ok(())
+        self
     }
 
     fn render_loading(&self, frame: &mut Frame, area: Rect) {

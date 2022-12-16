@@ -1,7 +1,4 @@
-use std::{
-    io::{self, Stdout},
-    sync::{Arc, Mutex},
-};
+use std::io::{self, Stdout};
 
 use color_eyre::Result;
 use crossterm::{
@@ -9,24 +6,22 @@ use crossterm::{
     execute,
     terminal::{self, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use lazy_static::lazy_static;
+
 use tuirealm::tui::{backend::CrosstermBackend, Terminal};
 
 use super::{
-    event::EventHandler,
-    msg::ViewMsg,
-    view::{PopupView, View},
+    event::{AppEvent, EventListener},
+    msg::{ChannelHandler, ViewConstructor, ViewMsg},
+    utils::is_terminate_key,
+    view::View,
 };
-
-lazy_static! {
-    pub static ref POPUP: Arc<Mutex<Option<PopupView>>> = Arc::new(Mutex::new(None));
-}
 
 pub struct App {
     running: bool,
     views: Vec<Box<dyn View>>,
     terminal: Terminal<CrosstermBackend<Stdout>>,
-    events: EventHandler,
+    events: EventListener,
+    msgs: ChannelHandler<ViewMsg>,
 }
 
 impl Drop for App {
@@ -36,18 +31,20 @@ impl Drop for App {
 }
 
 impl App {
-    pub async fn new() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
-        let events = EventHandler::new(250).await;
+        let events = EventListener::new(250);
+        let msgs = ChannelHandler::new();
         Ok(Self {
             running: true,
             views: Vec::default(),
             terminal,
             events,
+            msgs,
         })
     }
 
@@ -65,8 +62,21 @@ impl App {
         Ok(())
     }
 
-    pub async fn run(&mut self) -> Result<()> {
+    pub fn run(&mut self) -> Result<()> {
         while self.running && !self.views.is_empty() {
+            self.terminal.draw(|frame| {
+                let mut last_fullscreen_view_index = 0;
+                for (i, view) in self.views.iter().enumerate() {
+                    if view.is_fullscreen() {
+                        last_fullscreen_view_index = i;
+                    }
+                }
+                for (i, view) in self.views.iter_mut().enumerate() {
+                    if i >= last_fullscreen_view_index {
+                        view.render(frame);
+                    }
+                }
+            })?;
             let view = match self.views.last_mut() {
                 Some(view) => view,
                 None => {
@@ -74,40 +84,51 @@ impl App {
                     break;
                 }
             };
-            self.terminal.draw(|frame| view.render(frame))?;
 
-            let event = self.events.next().await?;
+            let event = self.events.next()?;
+            match event {
+                AppEvent::Tick => {
+                    view.tick();
+                }
+                AppEvent::Key(evt) if is_terminate_key(evt) => {
+                    self.close();
+                    break;
+                }
+                event => {
+                    if let Err(err) = view.handle_event(&event) {
+                        self.enter_new_view(ViewConstructor::ErrorPopup(
+                            String::from("Error from View"),
+                            format!("{err:#}"),
+                        ))
+                    }
+                }
+            }
 
-            match view.handle_event(&event)? {
+            self.handle_msg();
+        }
+        Ok(())
+    }
+
+    fn handle_msg(&mut self) {
+        while let Ok(msg) = self.msgs.try_next() {
+            match msg {
                 ViewMsg::AppClose => {
                     self.close();
                     break;
                 }
-                ViewMsg::EnterNewView(view) => {
-                    self.enter_new_view(view);
-                }
-                ViewMsg::ExitCurrentView => {
-                    self.exit_current_view();
-                }
-                _ => (),
+                ViewMsg::EnterNewView(constructor) => self.enter_new_view(constructor),
+                ViewMsg::ExitCurrentView => self.exit_current_view(),
+                ViewMsg::None => (),
             }
         }
-
-        Ok(())
     }
 
-    pub fn enter_new_view(&mut self, view: Box<dyn View>) {
+    pub fn enter_new_view(&mut self, constructor: ViewConstructor) {
+        let view = constructor.construct(&self.msgs.sender);
         self.views.push(view);
     }
 
     pub fn exit_current_view(&mut self) {
-        let popup = Arc::clone(&POPUP);
-        if let Ok(mut result) = popup.try_lock() {
-            if result.is_some() {
-                *result = None;
-                return;
-            }
-        };
         self.views.pop();
     }
 }

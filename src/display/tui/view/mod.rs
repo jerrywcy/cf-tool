@@ -1,3 +1,5 @@
+use std::sync::mpsc;
+
 use color_eyre::Result;
 use tuirealm::Frame;
 
@@ -11,5 +13,9 @@ pub use popup::PopupView;
 
 pub trait View {
     fn render(&mut self, frame: &mut Frame<'_>);
-    fn handle_event(&mut self, event: &AppEvent) -> Result<ViewMsg>;
+    fn handle_event(&mut self, event: &AppEvent) -> Result<()>;
+    fn tick(&mut self);
+    fn is_fullscreen(&self) -> bool;
 }
+
+pub type ViewSender = mpsc::Sender<ViewMsg>;

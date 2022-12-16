@@ -8,6 +8,7 @@ use tuirealm::{
 
 use crate::display::tui::{
     base_component::{BaseComponent, Tabs},
+    component::ComponentSender,
     event::AppEvent,
     msg::ComponentMsg,
     utils::{is_left_key, is_right_key},
@@ -15,6 +16,7 @@ use crate::display::tui::{
 };
 
 pub struct ContestBrowserTabs {
+    sender: ComponentSender,
     component: Tabs,
 }
 
@@ -23,24 +25,26 @@ impl Component for ContestBrowserTabs {
         self.component.render(frame, area);
     }
 
-    fn on(&mut self, event: &AppEvent) -> Result<ComponentMsg> {
+    fn on(&mut self, event: &AppEvent) -> Result<()> {
         match *event {
             AppEvent::Key(evt) if is_right_key(evt) => {
                 self.component.next();
-                Ok(ComponentMsg::ChangedTo(self.component.index))
+                self.send(ComponentMsg::ChangedTo(self.component.index))?;
             }
             AppEvent::Key(evt) if is_left_key(evt) => {
                 self.component.prev();
-                Ok(ComponentMsg::ChangedTo(self.component.index))
+                self.send(ComponentMsg::ChangedTo(self.component.index))?;
             }
-            _ => Ok(ComponentMsg::None),
-        }
+            _ => (),
+        };
+        Ok(())
     }
 }
 
-impl Default for ContestBrowserTabs {
-    fn default() -> Self {
+impl ContestBrowserTabs {
+    pub fn new(sender: ComponentSender) -> Self {
         Self {
+            sender,
             component: Tabs::new(vec![
                 TextSpan::new("Problems").fg(Color::White),
                 TextSpan::new("Standings").fg(Color::White),
@@ -48,9 +52,12 @@ impl Default for ContestBrowserTabs {
             ]),
         }
     }
-}
 
-impl ContestBrowserTabs {
+    fn send(&mut self, msg: ComponentMsg) -> Result<()> {
+        self.sender.send(msg)?;
+        Ok(())
+    }
+
     pub fn selected(&self) -> usize {
         self.component.index
     }

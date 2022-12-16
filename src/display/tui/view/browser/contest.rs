@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use color_eyre::Result;
 
 use tuirealm::tui::layout::{Constraint, Direction, Layout};
@@ -7,16 +5,18 @@ use tuirealm::tui::layout::{Constraint, Direction, Layout};
 use crate::{
     api::objects::Contest,
     display::tui::{
-        app::POPUP,
         component::{ContestBrowserTabs, ProblemsList, StandingsList, SubmissionsList},
         event::AppEvent,
-        msg::{ComponentMsg, ViewMsg},
+        msg::{ChannelHandler, ComponentMsg, ViewMsg},
         utils::is_exit_key,
+        view::ViewSender,
         Component, View,
     },
 };
 
 pub struct ContestBrowser {
+    pub sender: ViewSender,
+    pub handler: ChannelHandler<ComponentMsg>,
     pub tabs: ContestBrowserTabs,
     pub problems_list: ProblemsList,
     pub standings_list: StandingsList,
@@ -38,62 +38,86 @@ impl View for ContestBrowser {
             2 => self.submissions_list.render(frame, chunks[1]),
             _ => unreachable!(),
         };
-
-        let popup = Arc::clone(&POPUP);
-        if let Ok(result) = popup.try_lock() {
-            if let Some(popup) = result.clone() {
-                popup.clone().render(frame);
-            }
-        };
     }
 
-    fn handle_event(&mut self, event: &AppEvent) -> Result<ViewMsg> {
+    fn handle_event(&mut self, event: &AppEvent) -> Result<()> {
         if let AppEvent::Key(evt) = event {
             if is_exit_key(*evt) {
-                return Ok(ViewMsg::ExitCurrentView);
+                self.send(ViewMsg::ExitCurrentView)?;
+                return Ok(());
             }
         }
-        let tabs_msg = self.tabs.on(event)?;
-        match self.handle_msg(tabs_msg)? {
-            ViewMsg::None => (),
-            msg => return Ok(msg),
-        }
-        let container_msg = match self.tabs.selected() {
+        self.tabs.on(event)?;
+        match self.tabs.selected() {
             0 => self.problems_list.on(event)?,
             1 => self.standings_list.on(event)?,
             2 => self.submissions_list.on(event)?,
             _ => unreachable!(),
         };
-        match self.handle_msg(container_msg)? {
-            ViewMsg::None => (),
-            msg => return Ok(msg),
+        while let Ok(msg) = self.handler.try_next() {
+            self.handle_msg(msg)?;
         }
+        Ok(())
+    }
 
-        Ok(ViewMsg::None)
+    fn tick(&mut self) {
+        match self.tabs.selected() {
+            0 => self.problems_list.tick(),
+            1 => self.standings_list.tick(),
+            2 => self.submissions_list.tick(),
+            _ => unreachable!(),
+        }
+    }
+
+    fn is_fullscreen(&self) -> bool {
+        true
     }
 }
 
 impl ContestBrowser {
-    pub fn new(contest: Contest) -> Result<Self> {
-        Ok(Self {
-            tabs: ContestBrowserTabs::default(),
-            problems_list: ProblemsList::new(contest.clone())?,
-            standings_list: StandingsList::new(contest.clone())?,
-            submissions_list: SubmissionsList::new(contest.clone())?,
+    pub fn new(sender: ViewSender, contest: Contest) -> Self {
+        let handler = ChannelHandler::new();
+        let tabs = ContestBrowserTabs::new(handler.sender.clone());
+        let mut problems_list = ProblemsList::new(handler.sender.clone(), contest.clone());
+        let mut standings_list = StandingsList::new(handler.sender.clone(), contest.clone());
+        let mut submissions_list = SubmissionsList::new(handler.sender.clone(), contest.clone());
+
+        problems_list.update();
+        standings_list.update();
+        submissions_list.update();
+
+        Self {
+            sender,
+            handler,
+            tabs,
+            problems_list,
+            standings_list,
+            submissions_list,
             contest,
-        })
+        }
     }
 
-    fn handle_msg(&mut self, msg: ComponentMsg) -> Result<ViewMsg> {
+    fn send(&mut self, msg: ViewMsg) -> Result<()> {
+        self.sender.send(msg)?;
+        Ok(())
+    }
+
+    fn handle_msg(&mut self, msg: ComponentMsg) -> Result<()> {
         match msg {
-            ComponentMsg::AppClose => return Ok(ViewMsg::AppClose),
-            ComponentMsg::EnterNewView(view) => return Ok(ViewMsg::EnterNewView(view)),
-            ComponentMsg::ExitCurrentView => return Ok(ViewMsg::ExitCurrentView),
+            ComponentMsg::AppClose => {
+                self.send(ViewMsg::AppClose)?;
+            }
+            ComponentMsg::EnterNewView(constructor) => {
+                self.send(ViewMsg::EnterNewView(constructor))?;
+            }
+            ComponentMsg::ExitCurrentView => {
+                self.send(ViewMsg::ExitCurrentView)?;
+            }
             ComponentMsg::ChangeToTab(index) => {
                 self.tabs.select(index)?;
             }
             _ => (),
-        }
-        Ok(ViewMsg::None)
+        };
+        Ok(())
     }
 }

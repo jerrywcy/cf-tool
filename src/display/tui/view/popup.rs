@@ -1,4 +1,5 @@
 use color_eyre::Result;
+
 use tuirealm::{
     tui::{
         layout::{Constraint, Direction, Layout},
@@ -8,14 +9,20 @@ use tuirealm::{
 };
 
 use crate::display::tui::{
-    component::Popup, event::AppEvent, msg::ViewMsg, types::TextSpans, Component,
+    component::Popup,
+    event::AppEvent,
+    msg::{ChannelHandler, ComponentMsg, ViewMsg},
+    types::TextSpans,
+    utils::is_exit_key,
+    Component,
 };
 
-use super::View;
+use super::{View, ViewSender};
 
-#[derive(Clone)]
 pub struct PopupView {
-    popup: Popup,
+    sender: ViewSender,
+    handler: ChannelHandler<ComponentMsg>,
+    component: Popup,
 }
 
 impl View for PopupView {
@@ -43,18 +50,64 @@ impl View for PopupView {
             )
             .split(chunks[1]);
         frame.render_widget(Clear, chunks[1]);
-        self.popup.render(frame, chunks[1]);
+        self.component.render(frame, chunks[1]);
     }
 
-    fn handle_event(&mut self, _event: &AppEvent) -> Result<ViewMsg> {
-        Ok(ViewMsg::None)
+    fn handle_event(&mut self, event: &AppEvent) -> Result<()> {
+        if let AppEvent::Key(evt) = event {
+            if is_exit_key(*evt) {
+                self.send(ViewMsg::ExitCurrentView)?;
+                return Ok(());
+            }
+        }
+        self.component.on(event)?;
+        while let Ok(msg) = self.handler.try_next() {
+            self.handle_msg(msg)?;
+        }
+        Ok(())
+    }
+
+    fn tick(&mut self) {}
+
+    fn is_fullscreen(&self) -> bool {
+        false
     }
 }
 
 impl PopupView {
-    pub fn new(title: impl Into<TextSpans>, text: impl Into<TextSpans>) -> Self {
+    pub fn new(
+        sender: ViewSender,
+        title: impl Into<TextSpans>,
+        text: impl Into<TextSpans>,
+    ) -> Self {
+        let handler = ChannelHandler::new();
+        let popup = Popup::new(handler.sender.clone(), title, text);
         Self {
-            popup: Popup::new(title, text),
+            sender,
+            handler,
+            component: popup,
         }
+    }
+
+    fn send(&mut self, msg: ViewMsg) -> Result<()> {
+        self.sender.send(msg)?;
+        Ok(())
+    }
+
+    fn handle_msg(&mut self, msg: ComponentMsg) -> Result<()> {
+        match msg {
+            ComponentMsg::AppClose => {
+                self.send(ViewMsg::AppClose)?;
+            }
+            ComponentMsg::EnterNewView(constructor) => {
+                self.send(ViewMsg::EnterNewView(constructor))?;
+            }
+            ComponentMsg::ExitCurrentView => {
+                self.send(ViewMsg::ExitCurrentView)?;
+            }
+
+            _ => (),
+        };
+        Ok(())
     }
 }

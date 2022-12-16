@@ -14,7 +14,7 @@ use super::BaseComponent;
 
 #[derive(Clone)]
 pub struct Paragraph {
-    scroll: u16,
+    pub scroll: u16,
     title: TextSpans,
     text: TextSpans,
 }
