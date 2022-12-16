@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use color_eyre::Result;
 
-
 use tuirealm::tui::layout::{Constraint, Direction, Layout};
 
 use crate::display::tui::{

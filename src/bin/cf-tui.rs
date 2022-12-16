@@ -7,8 +7,8 @@ use color_eyre::Result;
 #[tokio::main]
 async fn main() -> Result<()> {
     setup_logger()?;
-    let mut app = App::new()?;
+    let mut app = App::new().await?;
     app.enter_new_view(Box::new(MainBrowser::new()?));
-    app.run()?;
+    app.run().await?;
     Ok(())
 }

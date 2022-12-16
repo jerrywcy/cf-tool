@@ -36,13 +36,13 @@ impl Drop for App {
 }
 
 impl App {
-    pub fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
-        let events = EventHandler::new(250);
+        let events = EventHandler::new(250).await;
         Ok(Self {
             running: true,
             views: Vec::default(),
@@ -65,7 +65,7 @@ impl App {
         Ok(())
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    pub async fn run(&mut self) -> Result<()> {
         while self.running && !self.views.is_empty() {
             let view = match self.views.last_mut() {
                 Some(view) => view,
@@ -76,7 +76,7 @@ impl App {
             };
             self.terminal.draw(|frame| view.render(frame))?;
 
-            let event = self.events.next()?;
+            let event = self.events.next().await?;
 
             match view.handle_event(&event)? {
                 ViewMsg::AppClose => {

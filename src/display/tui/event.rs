@@ -1,10 +1,8 @@
 use color_eyre::Result;
-use crossterm::event::{self, Event as CrosstermEvent, KeyEvent, MouseEvent};
-use std::{
-    sync::mpsc,
-    thread,
-    time::{Duration, Instant},
-};
+use crossterm::event::{self, Event as CrosstermEvent, EventStream, KeyEvent, MouseEvent};
+use std::time::{Duration, Instant};
+use tokio::{select, sync::mpsc, task, time::sleep};
+use tokio_stream::StreamExt;
 
 pub enum AppEvent {
     FocusGained,
@@ -20,41 +18,40 @@ pub enum AppEvent {
 pub struct EventHandler {
     sender: mpsc::Sender<AppEvent>,
     receiver: mpsc::Receiver<AppEvent>,
-    handler: thread::JoinHandle<()>,
+    handler: task::JoinHandle<()>,
 }
 
 impl EventHandler {
-    pub fn new(tick_rate: u64) -> Self {
+    pub async fn new(tick_rate: u64) -> Self {
         let tick_rate = Duration::from_millis(tick_rate);
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::channel(100);
         let handler = {
             let sender = sender.clone();
-            thread::spawn(move || {
-                let mut last_tick = Instant::now();
+            tokio::spawn(async move {
+                let mut reader = EventStream::new();
                 loop {
-                    let timeout = tick_rate
-                        .checked_sub(last_tick.elapsed())
-                        .unwrap_or(tick_rate);
+                    let mut delay = sleep(tick_rate);
+                    let mut event = reader.next();
+                    select! {
+                        _ = delay => {sender.send(AppEvent::Tick).await;},
+                        maybe_event = event => {
+                            match maybe_event {
+                                Some(Ok(event)) => {
+                                    match event {
+                                        CrosstermEvent::FocusGained => sender.send(AppEvent::FocusGained),
+                                        CrosstermEvent::FocusLost => sender.send(AppEvent::FocusLost),
+                                        CrosstermEvent::Key(evt) => sender.send(AppEvent::Key(evt)),
+                                        CrosstermEvent::Mouse(evt) => sender.send(AppEvent::Mouse(evt)),
+                                        CrosstermEvent::Paste(string) => sender.send(AppEvent::Paste(string)),
+                                        CrosstermEvent::Resize(width, height) =>
+                                            sender.send(AppEvent::WindowResize(width, height))
 
-                    if event::poll(timeout).expect("No event available") {
-                        match event::read().expect("Unable to read event") {
-                            CrosstermEvent::FocusGained => sender.send(AppEvent::FocusGained),
-                            CrosstermEvent::FocusLost => sender.send(AppEvent::FocusLost),
-                            CrosstermEvent::Key(evt) => sender.send(AppEvent::Key(evt)),
-                            CrosstermEvent::Mouse(evt) => sender.send(AppEvent::Mouse(evt)),
-                            CrosstermEvent::Paste(string) => sender.send(AppEvent::Paste(string)),
-                            CrosstermEvent::Resize(width, height) => {
-                                sender.send(AppEvent::WindowResize(width, height))
-                            }
+                                    }.await;
+                                },
+                                Some(Err(err)) => {},
+                                None => {break;},
+                            };
                         }
-                        .expect("Failed to send terminal event")
-                    }
-
-                    if last_tick.elapsed() >= tick_rate {
-                        sender
-                            .send(AppEvent::Tick)
-                            .expect("failed to send tick event");
-                        last_tick = Instant::now();
                     }
                 }
             })
@@ -66,7 +63,7 @@ impl EventHandler {
         }
     }
 
-    pub fn next(&self) -> Result<AppEvent> {
-        Ok(self.receiver.recv()?)
+    pub async fn next(&mut self) -> Result<AppEvent> {
+        Ok(self.receiver.recv().await.unwrap())
     }
 }

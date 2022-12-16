@@ -19,7 +19,7 @@ bytesize = "1.1.0"
 chrono = "0.4.23"
 color-eyre = "0.6.2"
 config = { version = "0.13.3", features = ["json"] }
-crossterm = "0.25.0"
+crossterm = { version = "0.25.0", features = ["event-stream"] }
 dirs = "4.0.0"
 duration-human = "0.1.10"
 futures = "0.3.25"
@@ -30,7 +30,8 @@ serde = { version = "1.0.150", features = ["derive"] }
 serde_json = "1.0.89"
 sha2 = "0.10.6"
 thiserror = "1.0.37"
-tokio = { version = "1.23.0", features = ["rt", "full"] }
+tokio = { version = "1.23.0", features = ["rt", "full", "sync"] }
+tokio-stream = "0.1.11"
 tracing = "0.1.37"
 tracing-appender = "0.2.2"
 tracing-error = "0.2.0"
