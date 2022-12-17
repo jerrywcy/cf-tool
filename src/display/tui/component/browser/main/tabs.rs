@@ -26,7 +26,7 @@ impl Component for MainBrowserTabs {
     }
 
     fn on(&mut self, event: &AppEvent) -> Result<()> {
-        match *event {
+        match event {
             AppEvent::Key(evt) if is_right_key(evt) => {
                 self.component.next();
                 self.send(ComponentMsg::ChangedTo(self.component.index))?;

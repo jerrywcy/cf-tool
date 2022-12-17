@@ -1,5 +1,4 @@
 use std::{
-    ffi::OsString,
     fs::{DirBuilder, OpenOptions},
     io::ErrorKind,
     path::PathBuf,
@@ -38,14 +37,15 @@ lazy_static! {
 
 pub fn load_settings() -> Result<CFSettings> {
     let config_file_path = get_config_file_path()?;
-    match OpenOptions::new().read(true).open(&config_file_path) {
+    let file = OpenOptions::new().read(true).open(&config_file_path);
+    match file {
         Err(err) => {
             match err.kind() {
                 ErrorKind::NotFound => bail!("No configuration file found at {}.\nPlease add a configuration file or run `cf-tui config`.", config_file_path.display()),
                 _ => return Err(err).wrap_err(format!("Failed when reading configuration from {}", config_file_path.display())),
             }
         }
-        _ => (),
+        _ => drop(file),
     }
     let config = get_config(config_file_path)?;
     let settings = deserialize_config_into_settings(config)?;

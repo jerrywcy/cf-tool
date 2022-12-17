@@ -54,13 +54,18 @@ impl View for PopupView {
     }
 
     fn handle_event(&mut self, event: &AppEvent) -> Result<()> {
-        if let AppEvent::Key(evt) = event {
-            if is_exit_key(*evt) {
+        match event {
+            AppEvent::Tick => {
+                self.tick();
+            }
+            AppEvent::Key(evt) if is_exit_key(evt) => {
                 self.send(ViewMsg::ExitCurrentView)?;
-                return Ok(());
+            }
+            event => {
+                self.component.on(event)?;
             }
         }
-        self.component.on(event)?;
+
         while let Ok(msg) = self.handler.try_next() {
             self.handle_msg(msg)?;
         }

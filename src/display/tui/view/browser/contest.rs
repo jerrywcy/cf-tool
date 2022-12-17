@@ -41,19 +41,24 @@ impl View for ContestBrowser {
     }
 
     fn handle_event(&mut self, event: &AppEvent) -> Result<()> {
-        if let AppEvent::Key(evt) = event {
-            if is_exit_key(*evt) {
+        match event {
+            AppEvent::Tick => {
+                self.tick();
+            }
+            AppEvent::Key(evt) if is_exit_key(evt) => {
                 self.send(ViewMsg::ExitCurrentView)?;
-                return Ok(());
+            }
+            event => {
+                self.tabs.on(event)?;
+                match self.tabs.selected() {
+                    0 => self.problems_list.on(event)?,
+                    1 => self.standings_list.on(event)?,
+                    2 => self.submissions_list.on(event)?,
+                    _ => unreachable!(),
+                };
             }
         }
-        self.tabs.on(event)?;
-        match self.tabs.selected() {
-            0 => self.problems_list.on(event)?,
-            1 => self.standings_list.on(event)?,
-            2 => self.submissions_list.on(event)?,
-            _ => unreachable!(),
-        };
+
         while let Ok(msg) = self.handler.try_next() {
             self.handle_msg(msg)?;
         }

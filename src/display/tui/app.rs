@@ -86,16 +86,13 @@ impl App {
             };
 
             let event = self.events.next()?;
-            match event {
-                AppEvent::Tick => {
-                    view.tick();
-                }
+            match &event {
                 AppEvent::Key(evt) if is_terminate_key(evt) => {
                     self.close();
                     break;
                 }
                 event => {
-                    if let Err(err) = view.handle_event(&event) {
+                    if let Err(err) = view.handle_event(event) {
                         self.enter_new_view(ViewConstructor::ErrorPopup(
                             String::from("Error from View"),
                             format!("{err:#}"),

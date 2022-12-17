@@ -44,7 +44,7 @@ pub struct StandingsList {
 
 impl Component for StandingsList {
     fn on(&mut self, event: &AppEvent) -> Result<()> {
-        match *event {
+        match event {
             AppEvent::Key(evt) if is_up_key(evt) => {
                 self.component.next();
                 self.send(ComponentMsg::ChangedTo(self.component.selected()))?;

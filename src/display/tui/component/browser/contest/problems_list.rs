@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use color_eyre::{eyre::eyre, Result};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
 
 use lazy_static::lazy_static;
 use std::sync::mpsc;
@@ -26,7 +26,9 @@ use crate::{
         event::AppEvent,
         msg::{ChannelHandler, ComponentMsg, ViewConstructor},
         types::TextSpans,
-        utils::{is_enter_key, is_scroll_down, is_scroll_up},
+        utils::{
+            is_down_key, is_enter_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key,
+        },
         BaseComponent, Component,
     },
     settings::SETTINGS,
@@ -47,27 +49,9 @@ pub struct ProblemsList {
     problems: Vec<Problem>,
 }
 
-fn is_key(key: KeyEvent, code: KeyCode, modifiers: KeyModifiers) -> bool {
-    key.code == code && key.modifiers == modifiers
-}
-
-fn is_up_key(evt: KeyEvent) -> bool {
-    is_key(evt, KeyCode::Char('k'), KeyModifiers::NONE)
-        || is_key(evt, KeyCode::Up, KeyModifiers::NONE)
-}
-
-fn is_down_key(evt: KeyEvent) -> bool {
-    is_key(evt, KeyCode::Char('j'), KeyModifiers::NONE)
-        || is_key(evt, KeyCode::Down, KeyModifiers::NONE)
-}
-
-fn is_refresh_key(evt: KeyEvent) -> bool {
-    is_key(evt, KeyCode::F(5), KeyModifiers::NONE)
-}
-
 impl Component for ProblemsList {
     fn on(&mut self, event: &AppEvent) -> Result<()> {
-        match *event {
+        match event {
             AppEvent::Key(evt) if is_up_key(evt) => {
                 self.component.prev();
                 self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
@@ -100,7 +84,7 @@ impl Component for ProblemsList {
                     .clone();
                 let contest_id = self.contest.id;
                 let url = format!("{BASEURL}contest/{contest_id}/problem/{index}");
-                webbrowser::open(url.as_str())?;
+                webbrowser::open(&url)?;
                 self.send(ComponentMsg::OpenedWebsite(url))?;
             }
             _ => (),

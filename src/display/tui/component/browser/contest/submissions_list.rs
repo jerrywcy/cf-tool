@@ -52,7 +52,7 @@ pub struct SubmissionsList {
 
 impl Component for SubmissionsList {
     fn on(&mut self, event: &AppEvent) -> Result<()> {
-        match *event {
+        match event {
             AppEvent::Key(evt) if is_up_key(evt) => {
                 self.component.prev();
                 self.send(ComponentMsg::ChangedTo(self.component.selected()))?;
