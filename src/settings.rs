@@ -1,6 +1,14 @@
-use std::ffi::OsString;
+use std::{
+    ffi::OsString,
+    fs::{DirBuilder, OpenOptions},
+    io::ErrorKind,
+    path::PathBuf,
+};
 
-use anyhow::{Context, Ok, Result};
+use color_eyre::{
+    eyre::{bail, eyre, Context},
+    Result,
+};
 use config::{Config, File, FileFormat};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
@@ -30,35 +38,45 @@ lazy_static! {
 
 pub fn load_settings() -> Result<CFSettings> {
     let config_file_path = get_config_file_path()?;
+    match OpenOptions::new().read(true).open(&config_file_path) {
+        Err(err) => {
+            match err.kind() {
+                ErrorKind::NotFound => bail!("No configuration file found at {}.\nPlease add a configuration file or run `cf-tui config`.", config_file_path.display()),
+                _ => return Err(err).wrap_err(format!("Failed when reading configuration from {}", config_file_path.display())),
+            }
+        }
+        _ => (),
+    }
     let config = get_config(config_file_path)?;
     let settings = deserialize_config_into_settings(config)?;
     Ok(settings)
 }
 
-fn get_config_file_path() -> Result<OsString> {
-    let config_dir = dirs::config_dir().context("Configuration directory not defined")?;
-    let config_file_path = config_dir.join("cf").join("cf.json").into_os_string();
+pub fn get_config_file_path() -> Result<PathBuf> {
+    let config_dir = dirs::config_dir().ok_or(eyre!("Configuration directory not defined"))?;
+    DirBuilder::new().recursive(true).create(&config_dir)?;
+    let config_file_path = config_dir.join("cf").join("cf.json");
     Ok(config_file_path)
 }
 
-fn get_config(config_file_path: OsString) -> Result<Config> {
+pub fn get_config(config_file_path: PathBuf) -> Result<Config> {
     let config = Config::builder()
         .add_source(File::new(
-            config_file_path.to_str().context(format!(
+            config_file_path.to_str().ok_or(eyre!(
                 "Configuration directory contains non-unicode characters: {:?}",
                 config_file_path
             ))?,
             FileFormat::Json,
         ))
         .build()
-        .context("Failed to build config")?;
+        .wrap_err("Failed to build config")?;
     Ok(config)
 }
 
-fn deserialize_config_into_settings(config: Config) -> Result<CFSettings> {
+pub fn deserialize_config_into_settings(config: Config) -> Result<CFSettings> {
     let settings: CFSettings = config
         .try_deserialize()
-        .context("Failed to deserialize configuration file")?;
+        .wrap_err("Failed to deserialize configuration file")?;
     Ok(settings)
 }
 

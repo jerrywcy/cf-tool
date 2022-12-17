@@ -21,7 +21,7 @@ use super::{
 };
 
 lazy_static! {
-    static ref CLIENT: Client = Client::builder()
+    pub static ref CLIENT: Client = Client::builder()
         .user_agent("Mozilla/5.0 (X11; U; Linux x86_64; zh-CN; rv:1.9.2.10) Gecko/20100922 Ubuntu/10.10 (maverick) Firefox/3.6.10")
         .cookie_store(true)
         .build()
@@ -33,7 +33,7 @@ async fn request<T>(url: String) -> Result<T>
 where
     T: for<'a> Deserialize<'a>,
 {
-    let request_error_message = format!("Error occured when making a POST request");
+    let request_error_message = format!("Error occured when making a GET request");
     let response = CLIENT
         .get(url)
         .send()
@@ -41,8 +41,7 @@ where
         .wrap_err(request_error_message)?;
     let status_code = response.status();
     let json_error_message = format!(
-        "Server returned status: {status_code}.\n\nFailed to parse\n{:#?}\ninto CFApiResponse<Vec<Comment>>",
-        response
+        "Server returned status: {status_code}.\n\nFailed to parse\n{response:#?}\ninto CFApiResponse<Vec<Comment>>"
     );
     let response = response
         .json::<CFApiResponse<T>>()

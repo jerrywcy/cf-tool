@@ -24,13 +24,14 @@ dirs = "4.0.0"
 duration-human = "0.1.10"
 futures = "0.3.25"
 lazy_static = "1.4.0"
+nipper = "0.1.9"
 rand = "0.8.5"
 reqwest = { version = "0.11.13", features = ["json", "cookies"] }
 serde = { version = "1.0.150", features = ["derive"] }
 serde_json = "1.0.89"
 sha2 = "0.10.6"
 thiserror = "1.0.37"
-tokio = { version = "1.23.0", features = ["rt", "full", "sync"] }
+tokio = { version = "1.23.0", features = ["full", "sync"] }
 tokio-stream = "0.1.11"
 tracing = "0.1.37"
 tracing-appender = "0.2.2"
