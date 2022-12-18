@@ -1,11 +1,17 @@
-use std::sync::mpsc::{self, RecvError, TryRecvError};
+use std::{
+    path::PathBuf,
+    sync::mpsc::{self, RecvError, TryRecvError},
+};
 
 use tuirealm::props::{Color, TextSpan};
 
-use crate::api::objects::Contest;
+use crate::{
+    api::{objects::Contest, parse::TestCase},
+    settings::Scripts,
+};
 
 use super::{
-    view::{ContestBrowser, MainBrowser, PopupView},
+    view::{ContestBrowser, MainBrowser, PopupView, TestPopupView},
     View,
 };
 
@@ -27,6 +33,7 @@ pub enum ViewConstructor {
     MainBrowser,
     ContestBrowser(Contest),
     ErrorPopup(String, String),
+    TestPopup(Scripts, Vec<TestCase>, PathBuf, String),
 }
 
 impl ViewConstructor {
@@ -42,6 +49,9 @@ impl ViewConstructor {
                 TextSpan::new(title).fg(Color::Red),
                 text,
             )),
+            ViewConstructor::TestPopup(scripts, test_cases, file_path, title) => Box::new(
+                TestPopupView::new(sender, scripts, test_cases, file_path, title),
+            ),
         }
     }
 }

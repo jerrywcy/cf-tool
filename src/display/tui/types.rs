@@ -1,29 +1,13 @@
 use tuirealm::{
     props::{Color, Style, TextSpan},
     tui::{
-        text::{Span, Spans},
+        text::{self, Span, Spans},
         widgets::Cell,
     },
 };
 
 #[derive(Clone, Debug)]
 pub struct TextSpans(Vec<TextSpan>);
-
-impl TextSpans {
-    pub fn height(&self) -> u16 {
-        let mut height: u16 = 1;
-        self.0.iter().for_each(|text| {
-            height += text
-                .content
-                .chars()
-                .filter(|ch| *ch == '\n')
-                .count()
-                .try_into()
-                .unwrap_or(0);
-        });
-        height
-    }
-}
 
 impl TextSpans {
     pub fn fg(self, color: Color) -> Self {
@@ -107,5 +91,83 @@ impl<'a> Into<Cell<'a>> for TextSpans {
 impl<'a> Into<Cell<'a>> for &TextSpans {
     fn into(self) -> Cell<'a> {
         Cell::from(Into::<Spans>::into(self))
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct Text {
+    pub lines: Vec<TextSpans>,
+}
+
+impl Text {
+    pub fn height(&self) -> usize {
+        self.lines.len()
+    }
+}
+
+impl Text {
+    pub fn fg(self, color: Color) -> Self {
+        Self {
+            lines: self.lines.into_iter().map(|text| text.fg(color)).collect(),
+        }
+    }
+
+    pub fn bg(self, color: Color) -> Self {
+        Self {
+            lines: self.lines.into_iter().map(|text| text.bg(color)).collect(),
+        }
+    }
+}
+
+impl From<String> for Text {
+    fn from(text: String) -> Self {
+        let lines = text.split("\n").map(|line| TextSpans::from(line)).collect();
+        Self { lines }
+    }
+}
+
+impl From<&str> for Text {
+    fn from(text: &str) -> Self {
+        Self::from(String::from(text))
+    }
+}
+
+impl From<TextSpan> for Text {
+    fn from(text: TextSpan) -> Self {
+        let lines: Vec<TextSpans> = text
+            .content
+            .split("\n")
+            .map(|line| {
+                TextSpan {
+                    content: line.to_string(),
+                    ..text
+                }
+                .into()
+            })
+            .collect();
+        Self { lines }
+    }
+}
+
+impl From<Vec<Text>> for Text {
+    fn from(texts: Vec<Text>) -> Self {
+        let mut lines: Vec<TextSpans> = vec![];
+        texts
+            .into_iter()
+            .for_each(|mut text| lines.append(&mut text.lines));
+        Self { lines }
+    }
+}
+
+impl From<Vec<TextSpans>> for Text {
+    fn from(text: Vec<TextSpans>) -> Self {
+        Self { lines: text }
+    }
+}
+
+impl<'a> Into<text::Text<'a>> for Text {
+    fn into(self) -> text::Text<'a> {
+        let lines: Vec<Spans> = self.lines.into_iter().map(|line| line.into()).collect();
+        text::Text { lines }
     }
 }

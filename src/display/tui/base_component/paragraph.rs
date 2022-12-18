@@ -2,13 +2,12 @@ use tuirealm::{
     props::{Alignment, BorderType},
     tui::{
         layout::Rect,
-        text::Spans,
         widgets::{Block, Borders, Paragraph as TuiParagraph, Wrap},
     },
     Frame,
 };
 
-use crate::display::tui::types::TextSpans;
+use crate::display::tui::types::{Text, TextSpans};
 
 use super::BaseComponent;
 
@@ -16,13 +15,13 @@ use super::BaseComponent;
 pub struct Paragraph {
     pub scroll: u16,
     title: TextSpans,
-    text: TextSpans,
+    text: Text,
 }
 
 impl BaseComponent for Paragraph {
     fn render(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let text: Spans = self.text.clone().into();
-        let title: Spans = self.title.clone().into();
+        let text = self.text.clone();
+        let title = self.title.clone();
         let paragraph = TuiParagraph::new(text)
             .block(
                 Block::default()
@@ -30,6 +29,7 @@ impl BaseComponent for Paragraph {
                     .border_type(BorderType::Rounded)
                     .title(title),
             )
+            .scroll((self.scroll, 0))
             .alignment(Alignment::Left)
             .wrap(Wrap { trim: false });
         frame.render_widget(paragraph, area);
@@ -37,7 +37,7 @@ impl BaseComponent for Paragraph {
 }
 
 impl Paragraph {
-    pub fn new(title: impl Into<TextSpans>, text: impl Into<TextSpans>) -> Self {
+    pub fn new(title: impl Into<TextSpans>, text: impl Into<Text>) -> Self {
         Self {
             scroll: 0,
             title: title.into(),
@@ -45,15 +45,20 @@ impl Paragraph {
         }
     }
 
+    pub fn set_text(&mut self, text: impl Into<Text>) -> &mut Self {
+        self.text = text.into();
+        self
+    }
+
     pub fn scroll_down(&mut self) {
-        if self.scroll >= 1 {
-            self.scroll -= 1;
+        if usize::from(self.scroll + 1) < self.text.height() {
+            self.scroll += 1
         }
     }
 
     pub fn scroll_up(&mut self) {
-        if self.scroll + 1 < self.text.height() {
-            self.scroll += 1
+        if self.scroll >= 1 {
+            self.scroll -= 1;
         }
     }
 }

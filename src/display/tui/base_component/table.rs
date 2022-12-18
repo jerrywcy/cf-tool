@@ -4,20 +4,19 @@ use tuirealm::{
     tui::{
         layout::{Constraint, Rect},
         style::{Modifier, Style},
-        text::Spans,
-        widgets::{self, Block, Borders, Row, TableState},
+        widgets::{Block, Borders, Cell, Row, Table as TuiTable, TableState},
     },
     Frame,
 };
 
-use crate::display::tui::types::TextSpans;
+use crate::display::tui::types::{Text, TextSpans};
 
 use super::BaseComponent;
 
 pub struct Table {
     pub state: TableState,
-    pub items: Vec<Vec<TextSpans>>,
-    pub header: Vec<TextSpans>,
+    pub items: Vec<Vec<Text>>,
+    pub header: Vec<Text>,
     pub widths: Vec<Constraint>,
     pub title: TextSpans,
 }
@@ -29,7 +28,7 @@ lazy_static! {
 
 impl BaseComponent for Table {
     fn render(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let header: Vec<Spans> = self
+        let header: Vec<Cell> = self
             .header
             .iter()
             .map(|text| text.clone().bg(Color::Magenta).into())
@@ -39,17 +38,23 @@ impl BaseComponent for Table {
             .height(
                 self.header
                     .iter()
-                    .map(|text| text.height())
+                    .map(|text| text.height().try_into().unwrap_or(u16::MAX))
                     .max()
                     .unwrap_or(1),
             );
 
         let rows = self.items.iter().map(|texts| {
-            Row::new(texts.clone())
-                .height(texts.iter().map(|text| text.height()).max().unwrap_or(1))
+            let cells: Vec<Cell> = texts.iter().map(|text| text.clone().into()).collect();
+            Row::new(cells).height(
+                texts
+                    .iter()
+                    .map(|text| text.height().try_into().unwrap_or(u16::MAX))
+                    .max()
+                    .unwrap_or(1),
+            )
         });
         let title = self.title.clone();
-        let table = widgets::Table::new(rows)
+        let table = TuiTable::new(rows)
             .header(header)
             .block(
                 Block::default()
@@ -65,7 +70,7 @@ impl BaseComponent for Table {
 
 impl Table {
     pub fn new(
-        header: Vec<impl Into<TextSpans>>,
+        header: Vec<impl Into<Text>>,
         widths: Vec<Constraint>,
         title: impl Into<TextSpans>,
     ) -> Self {
@@ -91,7 +96,7 @@ impl Table {
         self.state.select(Some(index))
     }
 
-    pub fn set_items(&mut self, items: Vec<Vec<impl Into<TextSpans>>>) -> &mut Self {
+    pub fn set_items(&mut self, items: Vec<Vec<impl Into<Text>>>) -> &mut Self {
         self.items = items
             .into_iter()
             .map(|texts| texts.into_iter().map(|text| text.into()).collect())
@@ -99,7 +104,7 @@ impl Table {
         self
     }
 
-    pub fn set_header(&mut self, header: Vec<impl Into<TextSpans>>) -> &mut Self {
+    pub fn set_header(&mut self, header: Vec<impl Into<Text>>) -> &mut Self {
         self.header = header.into_iter().map(|text| text.into()).collect();
         self
     }

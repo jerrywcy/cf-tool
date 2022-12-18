@@ -21,7 +21,7 @@ use crate::{
         component::ComponentSender,
         event::AppEvent,
         msg::{ChannelHandler, ComponentMsg, ViewConstructor},
-        types::TextSpans,
+        types::{Text},
         utils::{is_down_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key},
         BaseComponent, Component,
     },
@@ -29,7 +29,7 @@ use crate::{
 
 #[derive(Debug, Default)]
 struct UpdateResult {
-    items: Vec<Vec<TextSpans>>,
+    items: Vec<Vec<Text>>,
     header: Vec<String>,
     widths: Vec<Constraint>,
 }
@@ -101,7 +101,7 @@ async fn update(sender: mpsc::Sender<UpdateResult>, contest_id: i32) -> Result<(
     header.append(&mut indexes);
 
     let rows = standings.rows;
-    let items: Vec<Vec<TextSpans>> = rows
+    let items: Vec<Vec<Text>> = rows
         .into_iter()
         .map(|row| {
             let rank = row.rank;

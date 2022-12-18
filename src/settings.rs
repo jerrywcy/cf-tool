@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::{DirBuilder, OpenOptions},
     io::ErrorKind,
     path::PathBuf,
@@ -16,10 +17,14 @@ use serde::{Deserialize, Serialize};
 pub struct CFTemplate {
     pub alias: String,
     pub lang: String,
-    pub path: String,
-    pub before_script: String,
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct Scripts {
+    pub before_script: Option<String>,
     pub script: String,
-    pub after_script: String,
+    pub after_script: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -28,7 +33,8 @@ pub struct CFSettings {
     pub key: Option<String>,
     pub secret: Option<String>,
     pub template: Option<Vec<CFTemplate>>,
-    pub home_dir: Option<String>,
+    pub commands: Option<HashMap<String, Scripts>>,
+    pub home_dir: Option<PathBuf>,
 }
 
 lazy_static! {

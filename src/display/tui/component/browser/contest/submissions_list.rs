@@ -27,6 +27,7 @@ use crate::{
         component::ComponentSender,
         event::AppEvent,
         msg::{ChannelHandler, ComponentMsg, ViewConstructor},
+        types::Text,
         utils::{
             is_down_key, is_enter_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key,
         },
@@ -37,7 +38,7 @@ use crate::{
 
 #[derive(Debug, Default)]
 struct UpdateResult {
-    items: Vec<Vec<TextSpan>>,
+    items: Vec<Vec<Text>>,
     submissions: Vec<Submission>,
 }
 
@@ -128,7 +129,7 @@ async fn update(sender: mpsc::Sender<UpdateResult>, contest_id: i32) -> Result<(
     }
     let submissions = contest_status(contest_id, SETTINGS.username.clone(), None, None).await?;
 
-    let items: Vec<Vec<TextSpan>> = submissions
+    let items: Vec<Vec<Text>> = submissions
         .iter()
         .map(|submission| {
             let naive = NaiveDateTime::from_timestamp_opt(submission.creationTimeSeconds, 0)
@@ -171,6 +172,9 @@ async fn update(sender: mpsc::Sender<UpdateResult>, contest_id: i32) -> Result<(
                 TextSpan::new(time_consumed),
                 TextSpan::new(memory_consumed),
             ]
+            .into_iter()
+            .map(|text| text.into())
+            .collect::<Vec<Text>>()
         })
         .collect();
 

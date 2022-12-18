@@ -3,10 +3,10 @@ use nipper::Document;
 
 use super::methods::CLIENT;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TestCase {
     pub input: String,
-    pub output: String,
+    pub answer: String,
 }
 
 pub async fn parse_testcase(url: String) -> Result<Vec<TestCase>> {
@@ -37,7 +37,10 @@ pub async fn parse_testcase(url: String) -> Result<Vec<TestCase>> {
     let test_cases: Vec<TestCase> = inputs
         .into_iter()
         .zip(outputs.into_iter())
-        .map(|(input, output)| TestCase { input, output })
+        .map(|(input, output)| TestCase {
+            input,
+            answer: output,
+        })
         .collect();
 
     Ok(test_cases)

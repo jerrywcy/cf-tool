@@ -7,11 +7,13 @@ use super::{event::AppEvent, msg::ComponentMsg};
 
 mod browser;
 mod popup;
+mod popup_test;
 pub mod utils;
 
 pub use browser::{ContestBrowserTabs, ProblemsList, StandingsList, SubmissionsList};
 pub use browser::{ContestList, MainBrowserTabs, ProblemsetList};
 pub use popup::Popup;
+pub use popup_test::{TestCommands, TestPopup};
 
 pub trait Component {
     fn on(&mut self, event: &AppEvent) -> Result<()>;

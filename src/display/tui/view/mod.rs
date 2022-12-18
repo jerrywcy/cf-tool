@@ -7,9 +7,11 @@ use super::{event::AppEvent, msg::ViewMsg};
 
 mod browser;
 mod popup;
+mod popup_test;
 
 pub use browser::{ContestBrowser, MainBrowser};
 pub use popup::PopupView;
+pub use popup_test::TestPopupView;
 
 pub trait View {
     fn render(&mut self, frame: &mut Frame<'_>);

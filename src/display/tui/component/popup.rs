@@ -5,7 +5,7 @@ use crate::display::tui::{
     base_component::Paragraph,
     event::AppEvent,
     msg::ComponentMsg,
-    types::TextSpans,
+    types::{Text, TextSpans},
     utils::{is_down_key, is_scroll_down, is_scroll_up, is_up_key},
     BaseComponent,
 };
@@ -50,7 +50,7 @@ impl Popup {
     pub fn new(
         sender: ComponentSender,
         title: impl Into<TextSpans>,
-        text: impl Into<TextSpans>,
+        text: impl Into<Text>,
     ) -> Self {
         Self {
             sender,

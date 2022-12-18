@@ -1,6 +1,7 @@
 pub mod app;
 pub mod base_component;
 pub mod component;
+pub mod error;
 pub mod event;
 pub mod msg;
 pub mod types;

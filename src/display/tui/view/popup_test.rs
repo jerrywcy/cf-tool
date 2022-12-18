@@ -1,5 +1,6 @@
-use color_eyre::Result;
+use std::path::PathBuf;
 
+use color_eyre::Result;
 use tuirealm::{
     tui::{
         layout::{Constraint, Direction, Layout},
@@ -8,32 +9,35 @@ use tuirealm::{
     Frame,
 };
 
-use crate::display::tui::{
-    component::Popup,
-    event::AppEvent,
-    msg::{ChannelHandler, ComponentMsg, ViewMsg},
-    types::{Text, TextSpans},
-    utils::is_exit_key,
-    Component,
+use crate::{
+    api::parse::TestCase,
+    display::tui::{
+        component::TestPopup,
+        event::AppEvent,
+        msg::{ChannelHandler, ComponentMsg, ViewMsg},
+        utils::is_exit_key,
+        Component,
+    },
+    settings::Scripts,
 };
 
 use super::{View, ViewSender};
 
-pub struct PopupView {
+pub struct TestPopupView {
     sender: ViewSender,
     handler: ChannelHandler<ComponentMsg>,
-    component: Popup,
+    component: TestPopup,
 }
 
-impl View for PopupView {
+impl View for TestPopupView {
     fn render(&mut self, frame: &mut Frame<'_>) {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints(
                 [
-                    Constraint::Ratio(1, 4),
-                    Constraint::Ratio(2, 4),
-                    Constraint::Ratio(1, 4),
+                    Constraint::Ratio(1, 5),
+                    Constraint::Ratio(3, 5),
+                    Constraint::Ratio(1, 5),
                 ]
                 .as_ref(),
             )
@@ -42,9 +46,9 @@ impl View for PopupView {
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Ratio(1, 4),
-                    Constraint::Ratio(2, 4),
-                    Constraint::Ratio(1, 4),
+                    Constraint::Ratio(1, 5),
+                    Constraint::Ratio(3, 5),
+                    Constraint::Ratio(1, 5),
                 ]
                 .as_ref(),
             )
@@ -72,17 +76,31 @@ impl View for PopupView {
         Ok(())
     }
 
-    fn tick(&mut self) {}
+    fn tick(&mut self) {
+        self.component.tick();
+    }
 
     fn is_fullscreen(&self) -> bool {
         false
     }
 }
 
-impl PopupView {
-    pub fn new(sender: ViewSender, title: impl Into<TextSpans>, text: impl Into<Text>) -> Self {
+impl TestPopupView {
+    pub fn new(
+        sender: ViewSender,
+        scripts: Scripts,
+        test_cases: Vec<TestCase>,
+        file_path: PathBuf,
+        title: String,
+    ) -> Self {
         let handler = ChannelHandler::new();
-        let component = Popup::new(handler.sender.clone(), title, text);
+        let component = TestPopup::new(
+            handler.sender.clone(),
+            scripts,
+            test_cases,
+            file_path,
+            title,
+        );
         Self {
             sender,
             handler,
