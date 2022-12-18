@@ -1,7 +1,11 @@
+
+
+
+
 use cf::{
     display::tui::{app::App, msg::ViewConstructor},
     log::setup_logger,
-    settings::load_settings,
+    settings::{load_settings},
 };
 use color_eyre::Result;
 

@@ -21,7 +21,7 @@ use crate::{
         component::ComponentSender,
         event::AppEvent,
         msg::{ChannelHandler, ComponentMsg, ViewConstructor},
-        types::{Text},
+        types::Text,
         utils::{is_down_key, is_refresh_key, is_scroll_down, is_scroll_up, is_up_key},
         BaseComponent, Component,
     },

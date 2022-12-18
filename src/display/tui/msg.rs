@@ -1,17 +1,18 @@
-use std::{
-    sync::mpsc::{self, RecvError, TryRecvError},
+use std::sync::mpsc::{self, RecvError, TryRecvError};
+
+use tuirealm::{
+    props::{Color, TextSpan},
+    tui::layout::Constraint,
 };
 
-use tuirealm::props::{Color, TextSpan};
-
-use crate::{
-    api::{objects::Contest},
-};
+use crate::api::objects::Contest;
 
 use super::{
-    component::UpdateFn,
+    component::{HandleSelectionFn, UpdateFn},
     types::{Text, TextSpans},
-    view::{ContestBrowser, GetChunkFn, MainBrowser, PopupView, UpdatablePopupView},
+    view::{
+        ContestBrowser, GetChunkFn, MainBrowser, PopupView, SelectPopupView, UpdatablePopupView,
+    },
     View,
 };
 
@@ -32,6 +33,14 @@ pub enum ViewConstructor {
     ContestBrowser(Contest),
     ErrorPopup(String, String),
     UpdatablePopup(GetChunkFn, UpdateFn, TextSpans, Text),
+    SelectPopup(
+        GetChunkFn,
+        HandleSelectionFn,
+        TextSpans,
+        Vec<Text>,
+        Vec<Constraint>,
+        Vec<Vec<Text>>,
+    ),
 }
 
 impl ViewConstructor {
@@ -50,6 +59,22 @@ impl ViewConstructor {
             ViewConstructor::UpdatablePopup(get_chunk, update, title, text) => Box::new(
                 UpdatablePopupView::new(sender, get_chunk, update, title, text),
             ),
+            ViewConstructor::SelectPopup(
+                get_chunk,
+                handle_selection,
+                title,
+                header,
+                widths,
+                items,
+            ) => Box::new(SelectPopupView::new(
+                sender,
+                get_chunk,
+                handle_selection,
+                title,
+                header,
+                widths,
+                items,
+            )),
         }
     }
 }

@@ -13,11 +13,12 @@ use config::{Config, File, FileFormat};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct CFTemplate {
     pub alias: String,
     pub lang: String,
     pub path: PathBuf,
+    pub ext: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

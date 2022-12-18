@@ -9,13 +9,18 @@ mod browser;
 mod popup;
 
 pub use browser::{ContestBrowser, MainBrowser};
-pub use popup::{get_chunk_with_ratio, GetChunkFn, PopupView, UpdatablePopupView};
+pub use popup::{get_chunk_with_ratio, GetChunkFn, PopupView, SelectPopupView, UpdatablePopupView};
 
 pub trait View {
     fn render(&mut self, frame: &mut Frame<'_>);
     fn handle_event(&mut self, event: &AppEvent) -> Result<()>;
-    fn tick(&mut self);
+    fn tick(&mut self) {}
     fn is_fullscreen(&self) -> bool;
+    fn on_exit(self)
+    where
+        Self: Sized,
+    {
+    }
 }
 
 pub type ViewSender = mpsc::Sender<ViewMsg>;

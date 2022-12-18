@@ -11,7 +11,9 @@ pub mod utils;
 
 pub use browser::{ContestBrowserTabs, ProblemsList, StandingsList, SubmissionsList};
 pub use browser::{ContestList, MainBrowserTabs, ProblemsetList};
-pub use popup::{ContentUpdateCmd, Popup, UpdatablePopup, UpdateFn};
+pub use popup::{
+    ContentUpdateCmd, HandleSelectionFn, Popup, SelectPopup, UpdatablePopup, UpdateFn,
+};
 
 pub trait Component {
     fn on(&mut self, event: &AppEvent) -> Result<()>;

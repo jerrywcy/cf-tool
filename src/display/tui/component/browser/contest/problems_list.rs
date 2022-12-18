@@ -1,12 +1,13 @@
 use std::{
     collections::HashMap,
     ffi::OsString,
-    fs::{self, read_dir, read_to_string, DirBuilder},
+    fs::{self, read_dir, read_to_string, write, DirBuilder},
     path::PathBuf,
     process::Stdio,
     time::Duration,
 };
 
+use chrono::{Datelike, Timelike};
 use color_eyre::{
     eyre::{bail, eyre, Context},
     Report, Result,
@@ -36,7 +37,7 @@ use crate::{
     },
     display::tui::{
         base_component::Table,
-        component::{ComponentSender, ContentUpdateCmd, UpdateFn},
+        component::{ComponentSender, ContentUpdateCmd, HandleSelectionFn, UpdateFn},
         error::NoConfigItemError,
         event::AppEvent,
         msg::{ChannelHandler, ComponentMsg, ViewConstructor},
@@ -48,7 +49,7 @@ use crate::{
         view::get_chunk_with_ratio,
         BaseComponent, Component,
     },
-    settings::{Scripts, SETTINGS},
+    settings::{CFTemplate, Scripts, SETTINGS},
 };
 
 #[derive(Debug, Default)]
@@ -66,6 +67,9 @@ pub struct ProblemsList {
     problems: Vec<Problem>,
 }
 
+fn is_generate_key(evt: &KeyEvent) -> bool {
+    is_key(evt, KeyCode::Char('g'), KeyModifiers::NONE)
+}
 fn is_test_key(evt: &KeyEvent) -> bool {
     is_key(evt, KeyCode::Char('t'), KeyModifiers::NONE)
 }
@@ -327,6 +331,7 @@ impl Component for ProblemsList {
             AppEvent::Key(evt) if is_parse_key(evt) => self.parse()?,
             AppEvent::Key(evt) if is_parse_all_key(evt) => self.parse_all()?,
             AppEvent::Key(evt) if is_test_key(evt) => self.test()?,
+            AppEvent::Key(evt) if is_generate_key(evt) => self.generate()?,
             _ => (),
         }
         Ok(())
@@ -503,6 +508,98 @@ impl ProblemsList {
         Ok(())
     }
 
+    fn generate(&mut self) -> Result<()> {
+        let templates = SETTINGS.templates.clone().ok_or(eyre!("No templates available.\n Please configure templates in configuration file or run `cf-tui config`"))?;
+        let index = self.component.selected();
+        let problem = self.problems.get(index).ok_or(eyre!(
+            "No such index: {index}\nCommonly this is a problem of the application."
+        ))?;
+        let contest_id: &'static i32 = Box::leak(Box::new(self.contest.id));
+        let problem_index: &'static String = Box::leak(Box::new(problem.index.clone()));
+
+        let title = TextSpans::from(format!("Generate for Problem {problem_index}"));
+        let header = vec![Text::from("Name"), Text::from("Lang")];
+        let widths = vec![Constraint::Percentage(50), Constraint::Percentage(50)];
+        let items = templates
+            .iter()
+            .map(|template| {
+                vec![
+                    Text::from(template.alias.clone()),
+                    Text::from(template.lang.clone()),
+                ]
+            })
+            .collect();
+
+        let handle_selection: HandleSelectionFn = Box::new(|index| {
+            let templates = SETTINGS.templates.clone().ok_or(eyre!("No templates available.\n Please configure templates in configuration file or run `cf-tui config`"))?;
+            let home_dir = SETTINGS.home_dir.clone().ok_or(NoConfigItemError {
+                item: "home_dir".to_string(),
+            })?;
+            let problem_dir = home_dir
+                .join("Contests")
+                .join(&*contest_id.to_string())
+                .join(&*problem_index);
+
+            let open_dir_err = eyre!(
+                "Failed to open directory when trying to test problem: {}",
+                problem_dir.display()
+            );
+            DirBuilder::new()
+                .recursive(true)
+                .create(&problem_dir)
+                .wrap_err(open_dir_err)?;
+            let template: &CFTemplate = templates
+                .get(index)
+                .ok_or(eyre!(format!("No template #{index}.")))?;
+            let template_dir = match dirs::config_dir() {
+                Some(config_dir) => {
+                    let template_dir = config_dir.join("cf").join("templates");
+                    DirBuilder::new().recursive(true).create(&template_dir)?;
+                    template_dir
+                }
+                None => bail!("Configuration directory not defined"),
+            };
+            let target_path = problem_dir.join(format!("{}.{}", &*problem_index, template.ext));
+            let file_path = if !template.path.is_absolute() {
+                template_dir.join(&template.path)
+            } else {
+                template.path.clone()
+            };
+            let current_date = chrono::Local::now();
+            let content = read_to_string(file_path.clone())
+                .wrap_err(format!(
+                    "Error occured when reading from {}",
+                    file_path.display()
+                ))?
+                .replace(
+                    "<% username %>",
+                    &SETTINGS.username.clone().ok_or(NoConfigItemError {
+                        item: "username".to_string(),
+                    })?,
+                )
+                .replace("<% year %>", &current_date.year().to_string())
+                .replace("<% month %>", &format!("{:02}", current_date.month()))
+                .replace("<% day %>", &format!("{:02}", current_date.day()))
+                .replace("<% hour %>", &format!("{:02}", current_date.hour()))
+                .replace("<% minute %>", &format!("{:02}", current_date.minute()))
+                .replace("<% second %>", &format!("{:02}", current_date.second()));
+            write(target_path.clone(), content).wrap_err(format!(
+                "Error occured when writing to {}",
+                target_path.display()
+            ))?;
+            Ok(())
+        });
+        self.send(ComponentMsg::EnterNewView(ViewConstructor::SelectPopup(
+            get_chunk_with_ratio((2, 1, 2), (1, 2, 1)),
+            handle_selection,
+            title,
+            header,
+            widths,
+            items,
+        )))?;
+        Ok(())
+    }
+
     fn parse(&mut self) -> Result<()> {
         let index = self.component.selected();
         let problem = self.problems.get(index).ok_or(eyre!(
@@ -520,7 +617,7 @@ impl ProblemsList {
                 if let Err(err) = parse(update_sender, contest_id, problem_index).await {
                     popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
                         "Error from Parse".to_string(),
-                        format!("{err:#?}"),
+                        format!("{err:?}"),
                     )));
                 }
             });
@@ -556,7 +653,7 @@ impl ProblemsList {
                         parse_problem(update_sender, i, contest_id, problem_index.clone()).await
                     {
                         let err_msg = TextSpans::from(format!(
-                            "Failed to parse Problem {problem_index}: {err:#?}"
+                            "Failed to parse Problem {problem_index}: {err:?}"
                         ))
                         .fg(Color::Red);
                         error_sender
@@ -579,7 +676,6 @@ impl ProblemsList {
         let home_dir = SETTINGS.home_dir.clone().ok_or(NoConfigItemError {
             item: "home_dir".to_string(),
         })?;
-
         let contest_id = self.contest.id;
         let index = self.component.selected();
         let problem = self.problems.get(index).ok_or(eyre!(
@@ -622,7 +718,7 @@ impl ProblemsList {
                             popup_sender.send(ComponentMsg::EnterNewView(
                                 ViewConstructor::ErrorPopup(
                                     "Error from Test".to_string(),
-                                    format!("{err:#?}"),
+                                    format!("{err:?}"),
                                 ),
                             ));
                             continue;
@@ -639,7 +735,7 @@ impl ProblemsList {
                     {
                         popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
                             "Error from Test".to_string(),
-                            format!("{err:#?}"),
+                            format!("{err:?}"),
                         )));
                     }
                 }

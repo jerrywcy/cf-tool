@@ -126,6 +126,6 @@ impl App {
     }
 
     pub fn exit_current_view(&mut self) {
-        self.views.pop();
+        if let Some(_view) = self.views.pop() {}
     }
 }
