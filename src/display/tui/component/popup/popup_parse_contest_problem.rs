@@ -121,13 +121,17 @@ impl ContestParsePopup {
         let title = format!("Parse Problem {problem_index}");
         let text = "Parsing...";
         let component = Paragraph::new(title, text);
-        tokio::spawn(async move {
-            if let Err(err) = parse(update_sender, contest_id, problem_index).await {
-                error_sender.send(UpdateResult {
-                    result: Text::from(format!("{err:#?}")).fg(Color::Red),
-                });
-            }
-        });
+        let executor = |update_sender: mpsc::Sender<UpdateResult>,
+                        error_sender: mpsc::Sender<UpdateResult>| {
+            tokio::spawn(async move {
+                if let Err(err) = parse(update_sender, contest_id, problem_index).await {
+                    error_sender.send(UpdateResult {
+                        result: Text::from(format!("{err:#?}")).fg(Color::Red),
+                    });
+                }
+            });
+        };
+        executor(update_sender, error_sender);
 
         Self {
             sender,

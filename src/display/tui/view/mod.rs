@@ -7,13 +7,9 @@ use super::{event::AppEvent, msg::ViewMsg};
 
 mod browser;
 mod popup;
-mod popup_parse_contest;
-mod popup_test;
 
 pub use browser::{ContestBrowser, MainBrowser};
-pub use popup::PopupView;
-pub use popup_parse_contest::ContestParsePopupView;
-pub use popup_test::TestPopupView;
+pub use popup::{get_chunk_with_ratio, GetChunkFn, PopupView, UpdatablePopupView};
 
 pub trait View {
     fn render(&mut self, frame: &mut Frame<'_>);

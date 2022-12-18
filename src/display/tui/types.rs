@@ -1,3 +1,6 @@
+use color_eyre::Report;
+use similar::{ChangeTag, TextDiff};
+use tokio::process::Command;
 use tuirealm::{
     props::{Color, Style, TextSpan},
     tui::{
@@ -104,6 +107,23 @@ impl Text {
         self.lines.push(line.into());
         self
     }
+
+    pub fn change(&mut self, index: usize, content: impl Into<TextSpans>) -> &mut Self {
+        match self.lines.get_mut(index) {
+            Some(line) => {
+                *line = content.into();
+            }
+            None => {
+                self.lines.append(
+                    &mut (self.lines.len()..index)
+                        .map(|_| TextSpans::from(""))
+                        .collect(),
+                );
+                self.lines.push(content.into());
+            }
+        }
+        self
+    }
 }
 
 impl Text {
@@ -172,9 +192,71 @@ impl From<Vec<TextSpans>> for Text {
     }
 }
 
+impl Into<Vec<TextSpans>> for Text {
+    fn into(self) -> Vec<TextSpans> {
+        self.lines
+    }
+}
+
 impl<'a> Into<text::Text<'a>> for Text {
     fn into(self) -> text::Text<'a> {
         let lines: Vec<Spans> = self.lines.into_iter().map(|line| line.into()).collect();
         text::Text { lines }
     }
+}
+
+pub enum TestResult {
+    Accepted,
+    WrongAnswer(String, String, String),
+    TimeLimitExceeded,
+    Testing,
+    Err(Report),
+}
+
+impl TestResult {
+    pub fn format(&self, id: usize) -> Text {
+        match self {
+            TestResult::Accepted => {
+                Text::from(TextSpan::new(format!("Passed #{id}.")).fg(Color::Green))
+            }
+            TestResult::WrongAnswer(input, output, answer) => {
+                let diff: Vec<TextSpans> = TextDiff::from_lines(output, answer)
+                    .iter_all_changes()
+                    .map(|line| {
+                        match line.tag() {
+                            ChangeTag::Equal => TextSpan::new(line.value()),
+                            ChangeTag::Insert => TextSpan::new(line.value()).fg(Color::Green),
+                            ChangeTag::Delete => TextSpan::new(line.value()).fg(Color::Red),
+                        }
+                        .into()
+                    })
+                    .collect();
+                Text::from(vec![
+                    Text::from(TextSpan::new(format!("Wrong Answer on Test #{id}")).fg(Color::Red)),
+                    Text::from("--- Input ---"),
+                    Text::from(input.clone()),
+                    Text::from("--- Output ---"),
+                    Text::from(output.clone()),
+                    Text::from("--- Answer --- "),
+                    Text::from(answer.clone()),
+                    Text::from("--- Diff ---"),
+                    Text::from(diff),
+                ])
+            }
+            TestResult::TimeLimitExceeded => Text::from(
+                TextSpan::new(format!("Time Limit Exceeded on Test #{id}")).fg(Color::Blue),
+            ),
+            TestResult::Err(err) => Text::from(
+                TextSpan::new(format!("Error occured on Test #{id}: {err:#?}")).fg(Color::Red),
+            ),
+            TestResult::Testing => Text::from(format!("Testing #{id}...")),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct TestCommands {
+    pub before_command: Option<Command>,
+    pub command: Command,
+    pub after_command: Option<Command>,
 }

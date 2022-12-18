@@ -1,21 +1,20 @@
 use std::{
-    path::PathBuf,
     sync::mpsc::{self, RecvError, TryRecvError},
 };
 
 use tuirealm::props::{Color, TextSpan};
 
 use crate::{
-    api::{objects::Contest, parse::TestCase},
-    settings::Scripts,
+    api::{objects::Contest},
 };
 
 use super::{
-    view::{ContestBrowser, ContestParsePopupView, MainBrowser, PopupView, TestPopupView},
+    component::UpdateFn,
+    types::{Text, TextSpans},
+    view::{ContestBrowser, GetChunkFn, MainBrowser, PopupView, UpdatablePopupView},
     View,
 };
 
-#[derive(Debug)]
 pub enum ComponentMsg {
     AppClose,
     ChangedTo(usize),
@@ -28,13 +27,11 @@ pub enum ComponentMsg {
     None,
 }
 
-#[derive(Debug)]
 pub enum ViewConstructor {
     MainBrowser,
     ContestBrowser(Contest),
     ErrorPopup(String, String),
-    TestPopup(Scripts, Vec<TestCase>, PathBuf, String),
-    ContestParsePopup(i32, String),
+    UpdatablePopup(GetChunkFn, UpdateFn, TextSpans, Text),
 }
 
 impl ViewConstructor {
@@ -50,17 +47,13 @@ impl ViewConstructor {
                 TextSpan::new(title).fg(Color::Red),
                 text,
             )),
-            ViewConstructor::TestPopup(scripts, test_cases, file_path, title) => Box::new(
-                TestPopupView::new(sender, scripts, test_cases, file_path, title),
-            ),
-            ViewConstructor::ContestParsePopup(contest_id, problem_index) => Box::new(
-                ContestParsePopupView::new(sender, contest_id, problem_index),
+            ViewConstructor::UpdatablePopup(get_chunk, update, title, text) => Box::new(
+                UpdatablePopupView::new(sender, get_chunk, update, title, text),
             ),
         }
     }
 }
 
-#[derive(Debug)]
 pub enum ViewMsg {
     AppClose,
     EnterNewView(ViewConstructor),

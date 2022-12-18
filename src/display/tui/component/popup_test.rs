@@ -1,9 +1,4 @@
-use std::{
-    path::{PathBuf},
-    process::Stdio,
-    sync::mpsc,
-    time::Duration,
-};
+use std::{path::PathBuf, process::Stdio, sync::mpsc, time::Duration};
 
 use color_eyre::{eyre::eyre, Report, Result};
 
@@ -35,7 +30,7 @@ struct UpdateResult {
     result: TestResult,
 }
 
-enum TestResult {
+pub enum TestResult {
     Accepted,
     WrongAnswer(String, String, String),
     TimeLimitExceeded,

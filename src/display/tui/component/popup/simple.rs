@@ -3,14 +3,13 @@ use tuirealm::{tui::layout::Rect, Frame};
 
 use crate::display::tui::{
     base_component::Paragraph,
+    component::ComponentSender,
     event::AppEvent,
     msg::ComponentMsg,
     types::{Text, TextSpans},
     utils::{is_down_key, is_scroll_down, is_scroll_up, is_up_key},
-    BaseComponent,
+    BaseComponent, Component,
 };
-
-use super::{Component, ComponentSender};
 
 #[derive(Clone)]
 pub struct Popup {

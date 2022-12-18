@@ -17,13 +17,13 @@ use crate::display::tui::{
 
 use super::{View, ViewSender};
 
-pub struct ContestParsePopupView {
+pub struct ContestProblemParsePopupView {
     sender: ViewSender,
     handler: ChannelHandler<ComponentMsg>,
     component: ContestParsePopup,
 }
 
-impl View for ContestParsePopupView {
+impl View for ContestProblemParsePopupView {
     fn render(&mut self, frame: &mut Frame<'_>) {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -79,7 +79,7 @@ impl View for ContestParsePopupView {
     }
 }
 
-impl ContestParsePopupView {
+impl ContestProblemParsePopupView {
     pub fn new(sender: ViewSender, contest_id: i32, problem_index: String) -> Self {
         let handler = ChannelHandler::new();
         let component = ContestParsePopup::new(handler.sender.clone(), contest_id, problem_index);

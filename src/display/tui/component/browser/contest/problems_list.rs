@@ -1,19 +1,22 @@
 use std::{
     collections::HashMap,
     ffi::OsString,
-    fs::{read_dir, read_to_string, DirBuilder},
+    fs::{self, read_dir, read_to_string, DirBuilder},
     path::PathBuf,
+    process::Stdio,
+    time::Duration,
 };
 
 use color_eyre::{
     eyre::{bail, eyre, Context},
-    Result,
+    Report, Result,
 };
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use lazy_static::lazy_static;
 use std::sync::mpsc;
+use tokio::{io::AsyncWriteExt, process::Command, select, time::sleep};
 
 use tuirealm::{
     props::{Alignment, BorderType, Color, TextSpan},
@@ -28,20 +31,21 @@ use crate::{
     api::{
         methods::{contest_standings, contest_status},
         objects::{Contest, Problem, SubmissionVerdict},
-        parse::TestCase,
+        parse::{parse_testcase, TestCase},
         utils::BASEURL,
     },
     display::tui::{
         base_component::Table,
-        component::ComponentSender,
+        component::{ComponentSender, ContentUpdateCmd, UpdateFn},
         error::NoConfigItemError,
         event::AppEvent,
         msg::{ChannelHandler, ComponentMsg, ViewConstructor},
-        types::Text,
+        types::{TestCommands, TestResult, Text, TextSpans},
         utils::{
             is_down_key, is_enter_key, is_key, is_refresh_key, is_scroll_down, is_scroll_up,
             is_up_key,
         },
+        view::{get_chunk_with_ratio},
         BaseComponent, Component,
     },
     settings::{Scripts, SETTINGS},
@@ -115,6 +119,146 @@ fn get_file_path_and_scripts(path: &PathBuf, file_name: &str) -> Result<(PathBuf
         path.display()
     );
 }
+
+async fn test(
+    sender: mpsc::Sender<ContentUpdateCmd>,
+    id: usize,
+    timeout: Duration,
+    test_case: TestCase,
+    test_commands: TestCommands,
+) -> Result<()> {
+    if let Some(mut command) = test_commands.before_command {
+        command.spawn()?.wait().await?;
+    }
+
+    let mut command = test_commands.command;
+    let mut child = command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()?;
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or(eyre!("Failed to write to Stdin"))?;
+    stdin.write_all(test_case.input.as_bytes()).await?;
+    let delay = sleep(timeout);
+    select! {
+        _ = delay => {
+            sender.send(ContentUpdateCmd::PushLines(TestResult::TimeLimitExceeded.format(id+1)))?;
+        }
+        result = child.wait_with_output() => {
+            match result {
+                Ok(output) => {
+                    let TestCase{input, answer} = test_case;
+                    let output = String::from_utf8_lossy(&output.stdout);
+                    let output = output.trim().to_string();
+                    let answer = answer.trim().to_string();
+                    if output != answer {
+                        sender.send(ContentUpdateCmd::PushLines(TestResult::WrongAnswer(input, output, answer).format(id+1) ))?;
+                    }
+                    else {
+                        sender.send(ContentUpdateCmd::PushLines(TestResult::Accepted.format(id+1) ))?;
+                    }
+                }
+                Err(err) => {
+                    sender.send(ContentUpdateCmd::PushLines(TestResult::Err(Report::from(err)).format(id+1) ))?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+static FULL_PATH_PLACE_HOLDER: &str = "<% full %>";
+static PATH_PLACE_HOLDER: &str = "<% path %>";
+static FILE_PLACE_HOLDER: &str = "<% file %>";
+
+fn get_command(full_path: &PathBuf, script: &str) -> Result<Command> {
+    let _full = full_path.display().to_string();
+    let path = full_path
+        .parent()
+        .ok_or(eyre!("Code file has no parent!"))?
+        .display()
+        .to_string();
+    let file = full_path
+        .file_stem()
+        .ok_or(eyre!("Code file has no file stem!"))?
+        .to_string_lossy();
+    let script = script
+        .replace(FULL_PATH_PLACE_HOLDER, &full_path.display().to_string())
+        .replace(PATH_PLACE_HOLDER, &path)
+        .replace(FILE_PLACE_HOLDER, &file);
+    let mut command = Command::from(execute::command(script));
+    command.current_dir(path);
+    Ok(command)
+}
+
+fn get_commands(file_path: &PathBuf, scripts: Scripts) -> Result<TestCommands> {
+    let before_command = match &scripts.before_script {
+        Some(script) => Some(get_command(&file_path, script)?),
+        None => None,
+    };
+    let command = get_command(&file_path, &scripts.script)?;
+    let after_command = match &scripts.after_script {
+        Some(script) => Some(get_command(&file_path, script)?),
+        None => None,
+    };
+    Ok(TestCommands {
+        before_command,
+        command,
+        after_command,
+    })
+}
+
+async fn parse(
+    sender: mpsc::Sender<ContentUpdateCmd>,
+    contest_id: i32,
+    problem_index: String,
+) -> Result<()> {
+    let home_dir = SETTINGS.home_dir.clone().ok_or(NoConfigItemError {
+        item: "home_dir".to_string(),
+    })?;
+    let problem_dir = home_dir
+        .join("Contests")
+        .join(contest_id.to_string())
+        .join(&problem_index);
+    let open_dir_err = eyre!(
+        "Failed to open directory when trying to test problem: {}",
+        problem_dir.display()
+    );
+    DirBuilder::new()
+        .recursive(true)
+        .create(&problem_dir)
+        .wrap_err(open_dir_err)?;
+
+    let url = format!("{BASEURL}contest/{contest_id}/problem/{problem_index}");
+    let test_cases = parse_testcase(url).await?;
+    let _text = Text::default();
+    sender.send(ContentUpdateCmd::Set(
+        Text::from(format!(
+            "Parsed {} test cases for Problem {problem_index}",
+            test_cases.len()
+        ))
+        .fg(Color::Green),
+    ));
+    for (i, test_case) in test_cases.into_iter().enumerate() {
+        let id = i + 1;
+        let input_path = problem_dir.join(format!("in{id}.txt"));
+        let answer_path = problem_dir.join(format!("ans{id}.txt"));
+        fs::write(input_path, test_case.input)?;
+        sender.send(ContentUpdateCmd::Push(TextSpans::from(format!(
+            "Parsed in{id}.txt"
+        ))));
+        fs::write(answer_path, test_case.answer)?;
+        sender.send(ContentUpdateCmd::Push(TextSpans::from(format!(
+            "Parsed ans{id}.txt"
+        ))));
+    }
+    Ok(())
+}
+
 impl Component for ProblemsList {
     fn on(&mut self, event: &AppEvent) -> Result<()> {
         match event {
@@ -165,9 +309,27 @@ impl Component for ProblemsList {
                 }
                 let contest_id = self.contest.id;
                 let problem_index = problem.index.clone();
-                self.send(ComponentMsg::EnterNewView(
-                    ViewConstructor::ContestParsePopup(contest_id, problem_index),
-                ))?;
+                let title = TextSpans::from(format!("Parse Problem {problem_index}"));
+                let text = Text::from("Parsing...");
+                let update: UpdateFn = Box::new(move |update_sender, popup_sender| {
+                    tokio::spawn(async move {
+                        if let Err(err) = parse(update_sender, contest_id, problem_index).await {
+                            let _err_msg = Text::from(format!("{err:#?}")).fg(Color::Red);
+                            popup_sender.send(ComponentMsg::EnterNewView(
+                                ViewConstructor::ErrorPopup(
+                                    "Error from Parse".to_string(),
+                                    format!("err:#?"),
+                                ),
+                            ));
+                        }
+                    });
+                });
+                self.send(ComponentMsg::EnterNewView(ViewConstructor::UpdatablePopup(
+                    get_chunk_with_ratio((1, 3, 1), (1, 3, 1)),
+                    update,
+                    title,
+                    text,
+                )))?;
             }
             AppEvent::Key(evt) if is_test_key(evt) => {
                 let home_dir = SETTINGS.home_dir.clone().ok_or(NoConfigItemError {
@@ -201,16 +363,56 @@ impl Component for ProblemsList {
                     );
                 }
                 let (file_path, scripts) = get_file_path_and_scripts(&problem_dir, &problem_index)?;
+                let texts: Text = (0..test_cases.len())
+                    .enumerate()
+                    .map(|(id, _)| TestResult::Testing.format(id + 1))
+                    .collect::<Vec<Text>>()
+                    .into();
+                let update: UpdateFn = Box::new(move |update_sender, popup_sender| {
+                    tokio::spawn(async move {
+                        for (i, test_case) in test_cases.into_iter().enumerate() {
+                            let update_sender = update_sender.clone();
+                            let commands = match get_commands(&file_path, scripts.clone()) {
+                                Ok(commands) => commands,
+                                Err(err) => {
+                                    popup_sender.send(ComponentMsg::EnterNewView(
+                                        ViewConstructor::ErrorPopup(
+                                            "Error from Test".to_string(),
+                                            format!("{err:#?}"),
+                                        ),
+                                    ));
+                                    continue;
+                                }
+                            };
+                            if let Err(err) = test(
+                                update_sender,
+                                i,
+                                Duration::from_millis(1000),
+                                test_case,
+                                commands,
+                            )
+                            .await
+                            {
+                                popup_sender.send(ComponentMsg::EnterNewView(
+                                    ViewConstructor::ErrorPopup(
+                                        "Error from Test".to_string(),
+                                        format!("{err:#?}"),
+                                    ),
+                                ));
+                            }
+                        }
+                    });
+                });
 
-                self.send(ComponentMsg::EnterNewView(ViewConstructor::TestPopup(
-                    scripts,
-                    test_cases,
-                    file_path,
-                    format!("Test for Problem {problem_index}"),
+                self.send(ComponentMsg::EnterNewView(ViewConstructor::UpdatablePopup(
+                    get_chunk_with_ratio((1, 3, 1), (1, 3, 1)),
+                    update,
+                    TextSpans::from(format!("Test for Problem {problem_index}")),
+                    texts,
                 )))?;
             }
             _ => (),
-        };
+        }
         Ok(())
     }
 

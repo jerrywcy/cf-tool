@@ -50,8 +50,13 @@ impl Paragraph {
         self
     }
 
-    pub fn push(&mut self, line: impl Into<TextSpans>) -> &mut Self {
-        self.text.push(line);
+    pub fn push_line(&mut self, content: impl Into<TextSpans>) -> &mut Self {
+        self.text.push(content);
+        self
+    }
+
+    pub fn change_line(&mut self, index: usize, content: impl Into<TextSpans>) -> &mut Self {
+        self.text.change(index, content);
         self
     }
 
