@@ -12,7 +12,7 @@ use super::error::NoAuthorizationError;
 fn rand() -> String {
     let charset: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                             abcdefghijklmnopqrstuvwxyz\
-                            0123456789)(*&^%$#@!~";
+                            0123456789";
     let len = 6;
     let mut rng = rand::thread_rng();
 

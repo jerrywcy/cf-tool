@@ -32,7 +32,7 @@ pub struct CFSettings {
     pub username: Option<String>,
     pub key: Option<String>,
     pub secret: Option<String>,
-    pub template: Option<Vec<CFTemplate>>,
+    pub templates: Option<Vec<CFTemplate>>,
     pub commands: Option<HashMap<String, Scripts>>,
     pub home_dir: Option<PathBuf>,
 }

@@ -2,6 +2,8 @@
 #![allow(non_camel_case_types)]
 //! Reference: [Codeforces Official API Documentation - Return objects](https://codeforces.com/apiHelp/methods)
 
+use std::time::Duration;
+
 use color_eyre::{
     eyre::{bail, WrapErr},
     Result,

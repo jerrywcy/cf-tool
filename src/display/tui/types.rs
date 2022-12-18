@@ -176,6 +176,20 @@ impl From<TextSpan> for Text {
     }
 }
 
+impl From<Vec<&str>> for Text {
+    fn from(texts: Vec<&str>) -> Self {
+        let lines = texts.into_iter().map(|line| line.into()).collect();
+        Self { lines }
+    }
+}
+
+impl From<Vec<String>> for Text {
+    fn from(texts: Vec<String>) -> Self {
+        let lines = texts.into_iter().map(|line| line.into()).collect();
+        Self { lines }
+    }
+}
+
 impl From<Vec<Text>> for Text {
     fn from(texts: Vec<Text>) -> Self {
         let mut lines: Vec<TextSpans> = vec![];

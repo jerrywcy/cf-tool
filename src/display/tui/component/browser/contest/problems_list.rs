@@ -45,7 +45,7 @@ use crate::{
             is_down_key, is_enter_key, is_key, is_refresh_key, is_scroll_down, is_scroll_up,
             is_up_key,
         },
-        view::{get_chunk_with_ratio},
+        view::get_chunk_with_ratio,
         BaseComponent, Component,
     },
     settings::{Scripts, SETTINGS},
@@ -72,6 +72,10 @@ fn is_test_key(evt: &KeyEvent) -> bool {
 
 fn is_parse_key(evt: &KeyEvent) -> bool {
     is_key(evt, KeyCode::Char('p'), KeyModifiers::NONE)
+}
+
+fn is_parse_all_key(evt: &KeyEvent) -> bool {
+    is_key(evt, KeyCode::Char('P'), KeyModifiers::SHIFT)
 }
 
 fn get_test_cases(path: &PathBuf) -> Vec<TestCase> {
@@ -225,7 +229,7 @@ async fn parse(
         .join(contest_id.to_string())
         .join(&problem_index);
     let open_dir_err = eyre!(
-        "Failed to open directory when trying to test problem: {}",
+        "Failed to open directory when trying to parse problem: {}",
         problem_dir.display()
     );
     DirBuilder::new()
@@ -235,7 +239,6 @@ async fn parse(
 
     let url = format!("{BASEURL}contest/{contest_id}/problem/{problem_index}");
     let test_cases = parse_testcase(url).await?;
-    let _text = Text::default();
     sender.send(ContentUpdateCmd::Set(
         Text::from(format!(
             "Parsed {} test cases for Problem {problem_index}",
@@ -248,14 +251,52 @@ async fn parse(
         let input_path = problem_dir.join(format!("in{id}.txt"));
         let answer_path = problem_dir.join(format!("ans{id}.txt"));
         fs::write(input_path, test_case.input)?;
-        sender.send(ContentUpdateCmd::Push(TextSpans::from(format!(
-            "Parsed in{id}.txt"
-        ))));
         fs::write(answer_path, test_case.answer)?;
-        sender.send(ContentUpdateCmd::Push(TextSpans::from(format!(
-            "Parsed ans{id}.txt"
-        ))));
     }
+
+    Ok(())
+}
+
+async fn parse_problem(
+    sender: mpsc::Sender<ContentUpdateCmd>,
+    index: usize,
+    contest_id: i32,
+    problem_index: String,
+) -> Result<()> {
+    let home_dir = SETTINGS.home_dir.clone().ok_or(NoConfigItemError {
+        item: "home_dir".to_string(),
+    })?;
+    let problem_dir = home_dir
+        .join("Contests")
+        .join(contest_id.to_string())
+        .join(&problem_index);
+    let open_dir_err = eyre!(
+        "Failed to open directory when trying to parse problem: {}",
+        problem_dir.display()
+    );
+    DirBuilder::new()
+        .recursive(true)
+        .create(&problem_dir)
+        .wrap_err(open_dir_err)?;
+
+    let url = format!("{BASEURL}contest/{contest_id}/problem/{problem_index}");
+    let test_cases = parse_testcase(url).await?;
+    sender.send(ContentUpdateCmd::Change(
+        index,
+        TextSpans::from(format!(
+            "Parsed {} test cases for Problem {problem_index}",
+            test_cases.len()
+        ))
+        .fg(Color::Green),
+    ));
+    for (i, test_case) in test_cases.into_iter().enumerate() {
+        let id = i + 1;
+        let input_path = problem_dir.join(format!("in{id}.txt"));
+        let answer_path = problem_dir.join(format!("ans{id}.txt"));
+        fs::write(input_path, test_case.input)?;
+        fs::write(answer_path, test_case.answer)?;
+    }
+
     Ok(())
 }
 
@@ -282,135 +323,10 @@ impl Component for ProblemsList {
                 self.update();
                 self.send(ComponentMsg::Update)?;
             }
-            AppEvent::Key(evt) if is_enter_key(evt) => {
-                let index = self.component.selected();
-                let index = self
-                    .problems
-                    .get(index)
-                    .ok_or(eyre!(
-                        "No such index: {index}\nCommonly this is a problem of the application."
-                    ))?
-                    .index
-                    .clone();
-                let contest_id = self.contest.id;
-                let url = format!("{BASEURL}contest/{contest_id}/problem/{index}");
-                webbrowser::open(&url)?;
-                self.send(ComponentMsg::OpenedWebsite(url))?;
-            }
-            AppEvent::Key(evt) if is_parse_key(evt) => {
-                let index = self.component.selected();
-                let problem = self.problems.get(index).ok_or(eyre!(
-                    "No such index: {index}\nCommonly this is a problem of the application."
-                ))?;
-                if problem.tags.contains(&"interactive".to_string()) {
-                    bail!(
-                        "The problem is interactive. The traditional way of testing does not work."
-                    );
-                }
-                let contest_id = self.contest.id;
-                let problem_index = problem.index.clone();
-                let title = TextSpans::from(format!("Parse Problem {problem_index}"));
-                let text = Text::from("Parsing...");
-                let update: UpdateFn = Box::new(move |update_sender, popup_sender| {
-                    tokio::spawn(async move {
-                        if let Err(err) = parse(update_sender, contest_id, problem_index).await {
-                            let _err_msg = Text::from(format!("{err:#?}")).fg(Color::Red);
-                            popup_sender.send(ComponentMsg::EnterNewView(
-                                ViewConstructor::ErrorPopup(
-                                    "Error from Parse".to_string(),
-                                    format!("err:#?"),
-                                ),
-                            ));
-                        }
-                    });
-                });
-                self.send(ComponentMsg::EnterNewView(ViewConstructor::UpdatablePopup(
-                    get_chunk_with_ratio((1, 3, 1), (1, 3, 1)),
-                    update,
-                    title,
-                    text,
-                )))?;
-            }
-            AppEvent::Key(evt) if is_test_key(evt) => {
-                let home_dir = SETTINGS.home_dir.clone().ok_or(NoConfigItemError {
-                    item: "home_dir".to_string(),
-                })?;
-
-                let contest_id = self.contest.id;
-                let index = self.component.selected();
-                let problem = self.problems.get(index).ok_or(eyre!(
-                    "No such index: {index}\nCommonly this is a problem of the application."
-                ))?;
-                let problem_index = problem.index.clone();
-                let problem_dir = home_dir
-                    .join("Contests")
-                    .join(contest_id.to_string())
-                    .join(&problem_index);
-
-                let open_dir_err = eyre!(
-                    "Failed to open directory when trying to test problem: {}",
-                    problem_dir.display()
-                );
-                DirBuilder::new()
-                    .recursive(true)
-                    .create(&problem_dir)
-                    .wrap_err(open_dir_err)?;
-                let test_cases = get_test_cases(&problem_dir);
-                if test_cases.is_empty() {
-                    bail!(
-                        "Cannot find any test cases in {}.\n Maybe you should parse tests first?",
-                        problem_dir.display()
-                    );
-                }
-                let (file_path, scripts) = get_file_path_and_scripts(&problem_dir, &problem_index)?;
-                let texts: Text = (0..test_cases.len())
-                    .enumerate()
-                    .map(|(id, _)| TestResult::Testing.format(id + 1))
-                    .collect::<Vec<Text>>()
-                    .into();
-                let update: UpdateFn = Box::new(move |update_sender, popup_sender| {
-                    tokio::spawn(async move {
-                        for (i, test_case) in test_cases.into_iter().enumerate() {
-                            let update_sender = update_sender.clone();
-                            let commands = match get_commands(&file_path, scripts.clone()) {
-                                Ok(commands) => commands,
-                                Err(err) => {
-                                    popup_sender.send(ComponentMsg::EnterNewView(
-                                        ViewConstructor::ErrorPopup(
-                                            "Error from Test".to_string(),
-                                            format!("{err:#?}"),
-                                        ),
-                                    ));
-                                    continue;
-                                }
-                            };
-                            if let Err(err) = test(
-                                update_sender,
-                                i,
-                                Duration::from_millis(1000),
-                                test_case,
-                                commands,
-                            )
-                            .await
-                            {
-                                popup_sender.send(ComponentMsg::EnterNewView(
-                                    ViewConstructor::ErrorPopup(
-                                        "Error from Test".to_string(),
-                                        format!("{err:#?}"),
-                                    ),
-                                ));
-                            }
-                        }
-                    });
-                });
-
-                self.send(ComponentMsg::EnterNewView(ViewConstructor::UpdatablePopup(
-                    get_chunk_with_ratio((1, 3, 1), (1, 3, 1)),
-                    update,
-                    TextSpans::from(format!("Test for Problem {problem_index}")),
-                    texts,
-                )))?;
-            }
+            AppEvent::Key(evt) if is_enter_key(evt) => self.enter()?,
+            AppEvent::Key(evt) if is_parse_key(evt) => self.parse()?,
+            AppEvent::Key(evt) if is_parse_all_key(evt) => self.parse_all()?,
+            AppEvent::Key(evt) if is_test_key(evt) => self.test()?,
             _ => (),
         }
         Ok(())
@@ -568,5 +484,174 @@ impl ProblemsList {
             )
             .alignment(Alignment::Center);
         frame.render_widget(loading, area);
+    }
+
+    fn enter(&mut self) -> Result<()> {
+        let index = self.component.selected();
+        let index = self
+            .problems
+            .get(index)
+            .ok_or(eyre!(
+                "No such index: {index}\nCommonly this is a problem of the application."
+            ))?
+            .index
+            .clone();
+        let contest_id = self.contest.id;
+        let url = format!("{BASEURL}contest/{contest_id}/problem/{index}");
+        webbrowser::open(&url)?;
+        self.send(ComponentMsg::OpenedWebsite(url))?;
+        Ok(())
+    }
+
+    fn parse(&mut self) -> Result<()> {
+        let index = self.component.selected();
+        let problem = self.problems.get(index).ok_or(eyre!(
+            "No such index: {index}\nCommonly this is a problem of the application."
+        ))?;
+        if problem.tags.contains(&"interactive".to_string()) {
+            bail!("The problem is interactive. The traditional way of testing does not work.");
+        }
+        let contest_id = self.contest.id;
+        let problem_index = problem.index.clone();
+        let title = TextSpans::from(format!("Parse Problem {problem_index}"));
+        let text = Text::from("Parsing...");
+        let update: UpdateFn = Box::new(move |update_sender, popup_sender| {
+            tokio::spawn(async move {
+                if let Err(err) = parse(update_sender, contest_id, problem_index).await {
+                    popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                        "Error from Parse".to_string(),
+                        format!("{err:#?}"),
+                    )));
+                }
+            });
+        });
+        self.send(ComponentMsg::EnterNewView(ViewConstructor::UpdatablePopup(
+            get_chunk_with_ratio((1, 3, 1), (1, 3, 1)),
+            update,
+            title,
+            text,
+        )))?;
+        Ok(())
+    }
+
+    fn parse_all(&mut self) -> Result<()> {
+        let problems = self.problems.clone();
+        let title = TextSpans::from(format!("Parsing {}", self.contest.name));
+        let texts: Text = (0..self.problems.len())
+            .map(|_| "Parsing...")
+            .collect::<Vec<&str>>()
+            .into();
+        let contest_id = self.contest.id;
+        let update: UpdateFn = Box::new(move |update_sender, _| {
+            for (i, problem) in problems.into_iter().enumerate() {
+                if problem.tags.contains(&"interactive".to_string()) {
+                    update_sender.clone().send(ContentUpdateCmd::Change(i, TextSpans::from(format!("Problem {i} is interactive. The traditional way of testing does not work.")).fg(Color::Red)));
+                    continue;
+                }
+                let problem_index = problem.index.clone();
+                let update_sender = update_sender.clone();
+                let error_sender = update_sender.clone();
+                tokio::spawn(async move {
+                    if let Err(err) =
+                        parse_problem(update_sender, i, contest_id, problem_index.clone()).await
+                    {
+                        let err_msg = TextSpans::from(format!(
+                            "Failed to parse Problem {problem_index}: {err:#?}"
+                        ))
+                        .fg(Color::Red);
+                        error_sender
+                            .clone()
+                            .send(ContentUpdateCmd::Change(i, err_msg));
+                    }
+                });
+            }
+        });
+        self.send(ComponentMsg::EnterNewView(ViewConstructor::UpdatablePopup(
+            get_chunk_with_ratio((1, 3, 1), (1, 3, 1)),
+            update,
+            title,
+            texts,
+        )))?;
+        Ok(())
+    }
+
+    fn test(&mut self) -> Result<()> {
+        let home_dir = SETTINGS.home_dir.clone().ok_or(NoConfigItemError {
+            item: "home_dir".to_string(),
+        })?;
+
+        let contest_id = self.contest.id;
+        let index = self.component.selected();
+        let problem = self.problems.get(index).ok_or(eyre!(
+            "No such index: {index}\nCommonly this is a problem of the application."
+        ))?;
+        let problem_index = problem.index.clone();
+        let problem_dir = home_dir
+            .join("Contests")
+            .join(contest_id.to_string())
+            .join(&problem_index);
+
+        let open_dir_err = eyre!(
+            "Failed to open directory when trying to test problem: {}",
+            problem_dir.display()
+        );
+        DirBuilder::new()
+            .recursive(true)
+            .create(&problem_dir)
+            .wrap_err(open_dir_err)?;
+        let test_cases = get_test_cases(&problem_dir);
+        if test_cases.is_empty() {
+            bail!(
+                "Cannot find any test cases in {}.\n Maybe you should parse tests first?",
+                problem_dir.display()
+            );
+        }
+        let (file_path, scripts) = get_file_path_and_scripts(&problem_dir, &problem_index)?;
+        let texts: Text = (0..test_cases.len())
+            .enumerate()
+            .map(|(id, _)| TestResult::Testing.format(id + 1))
+            .collect::<Vec<Text>>()
+            .into();
+        let update: UpdateFn = Box::new(move |update_sender, popup_sender| {
+            tokio::spawn(async move {
+                for (i, test_case) in test_cases.into_iter().enumerate() {
+                    let update_sender = update_sender.clone();
+                    let commands = match get_commands(&file_path, scripts.clone()) {
+                        Ok(commands) => commands,
+                        Err(err) => {
+                            popup_sender.send(ComponentMsg::EnterNewView(
+                                ViewConstructor::ErrorPopup(
+                                    "Error from Test".to_string(),
+                                    format!("{err:#?}"),
+                                ),
+                            ));
+                            continue;
+                        }
+                    };
+                    if let Err(err) = test(
+                        update_sender,
+                        i,
+                        Duration::from_millis(1000),
+                        test_case,
+                        commands,
+                    )
+                    .await
+                    {
+                        popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                            "Error from Test".to_string(),
+                            format!("{err:#?}"),
+                        )));
+                    }
+                }
+            });
+        });
+
+        self.send(ComponentMsg::EnterNewView(ViewConstructor::UpdatablePopup(
+            get_chunk_with_ratio((1, 3, 1), (1, 3, 1)),
+            update,
+            TextSpans::from(format!("Test for Problem {problem_index}")),
+            texts,
+        )))?;
+        Ok(())
     }
 }
