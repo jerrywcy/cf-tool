@@ -66,6 +66,10 @@ fn is_test_key(evt: &KeyEvent) -> bool {
     is_key(evt, KeyCode::Char('t'), KeyModifiers::NONE)
 }
 
+fn is_parse_key(evt: &KeyEvent) -> bool {
+    is_key(evt, KeyCode::Char('p'), KeyModifiers::NONE)
+}
+
 fn get_test_cases(path: &PathBuf) -> Vec<TestCase> {
     let mut i = 1;
     let mut test_cases = vec![];
@@ -106,7 +110,10 @@ fn get_file_path_and_scripts(path: &PathBuf, file_name: &str) -> Result<(PathBuf
             }
         }
     }
-    bail!("Cannot find any code in {}", path.display());
+    bail!(
+        "Cannot find any code in {}.\nMaybe you should generate it first?",
+        path.display()
+    );
 }
 impl Component for ProblemsList {
     fn on(&mut self, event: &AppEvent) -> Result<()> {
@@ -146,6 +153,22 @@ impl Component for ProblemsList {
                 webbrowser::open(&url)?;
                 self.send(ComponentMsg::OpenedWebsite(url))?;
             }
+            AppEvent::Key(evt) if is_parse_key(evt) => {
+                let index = self.component.selected();
+                let problem = self.problems.get(index).ok_or(eyre!(
+                    "No such index: {index}\nCommonly this is a problem of the application."
+                ))?;
+                if problem.tags.contains(&"interactive".to_string()) {
+                    bail!(
+                        "The problem is interactive. The traditional way of testing does not work."
+                    );
+                }
+                let contest_id = self.contest.id;
+                let problem_index = problem.index.clone();
+                self.send(ComponentMsg::EnterNewView(
+                    ViewConstructor::ContestParsePopup(contest_id, problem_index),
+                ))?;
+            }
             AppEvent::Key(evt) if is_test_key(evt) => {
                 let home_dir = SETTINGS.home_dir.clone().ok_or(NoConfigItemError {
                     item: "home_dir".to_string(),
@@ -172,7 +195,10 @@ impl Component for ProblemsList {
                     .wrap_err(open_dir_err)?;
                 let test_cases = get_test_cases(&problem_dir);
                 if test_cases.is_empty() {
-                    bail!("Cannot find any test cases in {}", problem_dir.display());
+                    bail!(
+                        "Cannot find any test cases in {}.\n Maybe you should parse tests first?",
+                        problem_dir.display()
+                    );
                 }
                 let (file_path, scripts) = get_file_path_and_scripts(&problem_dir, &problem_index)?;
 

@@ -1,6 +1,5 @@
 use std::{
-    ffi::OsStr,
-    path::{Path, PathBuf},
+    path::{PathBuf},
     process::Stdio,
     sync::mpsc,
     time::Duration,
@@ -80,7 +79,7 @@ impl TestResult {
             TestResult::Err(err) => Text::from(
                 TextSpan::new(format!("Error occured on Test #{id}: {err:#?}")).fg(Color::Red),
             ),
-            TestResult::Testing => Text::from(format!("Testing...")),
+            TestResult::Testing => Text::from(format!("Testing #{id}...")),
         }
     }
 }
@@ -184,7 +183,7 @@ static PATH_PLACE_HOLDER: &str = "<% path %>";
 static FILE_PLACE_HOLDER: &str = "<% file %>";
 
 fn get_command(full_path: &PathBuf, script: &str) -> Result<Command> {
-    let full = full_path.display().to_string();
+    let _full = full_path.display().to_string();
     let path = full_path
         .parent()
         .ok_or(eyre!("Code file has no parent!"))?

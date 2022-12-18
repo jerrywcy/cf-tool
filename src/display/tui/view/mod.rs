@@ -7,10 +7,12 @@ use super::{event::AppEvent, msg::ViewMsg};
 
 mod browser;
 mod popup;
+mod popup_parse_contest;
 mod popup_test;
 
 pub use browser::{ContestBrowser, MainBrowser};
 pub use popup::PopupView;
+pub use popup_parse_contest::ContestParsePopupView;
 pub use popup_test::TestPopupView;
 
 pub trait View {

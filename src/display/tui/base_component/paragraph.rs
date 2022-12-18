@@ -50,6 +50,11 @@ impl Paragraph {
         self
     }
 
+    pub fn push(&mut self, line: impl Into<TextSpans>) -> &mut Self {
+        self.text.push(line);
+        self
+    }
+
     pub fn scroll_down(&mut self) {
         if usize::from(self.scroll + 1) < self.text.height() {
             self.scroll += 1

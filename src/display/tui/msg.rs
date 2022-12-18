@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    view::{ContestBrowser, MainBrowser, PopupView, TestPopupView},
+    view::{ContestBrowser, ContestParsePopupView, MainBrowser, PopupView, TestPopupView},
     View,
 };
 
@@ -34,6 +34,7 @@ pub enum ViewConstructor {
     ContestBrowser(Contest),
     ErrorPopup(String, String),
     TestPopup(Scripts, Vec<TestCase>, PathBuf, String),
+    ContestParsePopup(i32, String),
 }
 
 impl ViewConstructor {
@@ -51,6 +52,9 @@ impl ViewConstructor {
             )),
             ViewConstructor::TestPopup(scripts, test_cases, file_path, title) => Box::new(
                 TestPopupView::new(sender, scripts, test_cases, file_path, title),
+            ),
+            ViewConstructor::ContestParsePopup(contest_id, problem_index) => Box::new(
+                ContestParsePopupView::new(sender, contest_id, problem_index),
             ),
         }
     }

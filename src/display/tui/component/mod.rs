@@ -7,12 +7,14 @@ use super::{event::AppEvent, msg::ComponentMsg};
 
 mod browser;
 mod popup;
+mod popup_parse_contest;
 mod popup_test;
 pub mod utils;
 
 pub use browser::{ContestBrowserTabs, ProblemsList, StandingsList, SubmissionsList};
 pub use browser::{ContestList, MainBrowserTabs, ProblemsetList};
 pub use popup::Popup;
+pub use popup_parse_contest::ContestParsePopup;
 pub use popup_test::{TestCommands, TestPopup};
 
 pub trait Component {

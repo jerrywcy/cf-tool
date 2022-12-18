@@ -100,6 +100,13 @@ pub struct Text {
 }
 
 impl Text {
+    pub fn push(&mut self, line: impl Into<TextSpans>) -> &mut Self {
+        self.lines.push(line.into());
+        self
+    }
+}
+
+impl Text {
     pub fn height(&self) -> usize {
         self.lines.len()
     }
