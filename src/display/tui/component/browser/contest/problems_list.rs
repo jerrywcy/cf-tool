@@ -82,6 +82,10 @@ fn is_parse_all_key(evt: &KeyEvent) -> bool {
     is_key(evt, KeyCode::Char('P'), KeyModifiers::SHIFT)
 }
 
+fn is_submit_key(evt: &KeyEvent) -> bool {
+    is_key(evt, KeyCode::Char('s'), KeyModifiers::NONE)
+}
+
 fn get_test_cases(path: &PathBuf) -> Vec<TestCase> {
     let mut i = 1;
     let mut test_cases = vec![];
@@ -332,6 +336,7 @@ impl Component for ProblemsList {
             AppEvent::Key(evt) if is_parse_all_key(evt) => self.parse_all()?,
             AppEvent::Key(evt) if is_test_key(evt) => self.test()?,
             AppEvent::Key(evt) if is_generate_key(evt) => self.generate()?,
+            AppEvent::Key(evt) if is_submit_key(evt) => self.submit()?,
             _ => (),
         }
         Ok(())
@@ -748,6 +753,43 @@ impl ProblemsList {
             TextSpans::from(format!("Test for Problem {problem_index}")),
             texts,
         )))?;
+        Ok(())
+    }
+
+    fn submit(&mut self) -> Result<()> {
+        let home_dir = SETTINGS.home_dir.clone().ok_or(NoConfigItemError {
+            item: "home_dir".to_string(),
+        })?;
+        let contest_id = self.contest.id;
+        let index = self.component.selected();
+        let problem = self.problems.get(index).ok_or(eyre!(
+            "No such index: {index}\nCommonly this is a problem of the application."
+        ))?;
+        let problem_index = problem.index.clone();
+        let problem_dir = home_dir
+            .join("Contests")
+            .join(contest_id.to_string())
+            .join(&problem_index);
+
+        let open_dir_err = eyre!(
+            "Failed to open directory when trying to test problem: {}",
+            problem_dir.display()
+        );
+        DirBuilder::new()
+            .recursive(true)
+            .create(&problem_dir)
+            .wrap_err(open_dir_err)?;
+        let (file_path, scripts) = get_file_path_and_scripts(&problem_dir, &problem_index)?;
+
+        let content = read_to_string(&file_path).wrap_err(format!(
+            "Error occured when reading from {}",
+            file_path.display()
+        ))?;
+        if let Err(err) = terminal_clipboard::set_string(content) {
+            bail!("Error occured when trying to copy code to clipboard: {err:?}");
+        }
+        let url = format!("{BASEURL}contest/{contest_id}/submit/{problem_index}");
+        webbrowser::open(&url);
         Ok(())
     }
 }
