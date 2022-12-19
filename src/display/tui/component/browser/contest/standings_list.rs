@@ -1,3 +1,4 @@
+#![allow(unused_must_use)]
 use color_eyre::Result;
 
 use lazy_static::lazy_static;
@@ -122,13 +123,11 @@ async fn update(sender: mpsc::Sender<UpdateResult>, contest_id: i32) -> Result<(
             ret.into_iter().map(|text| text.into()).collect()
         })
         .collect();
-    sender
-        .send(UpdateResult {
-            items,
-            header,
-            widths,
-        })
-        .unwrap();
+    sender.send(UpdateResult {
+        items,
+        header,
+        widths,
+    });
     Ok(())
 }
 
@@ -177,13 +176,11 @@ impl StandingsList {
         self.updating += 1;
         tokio::spawn(async move {
             if let Err(err) = update(update_sender, contest_id).await {
-                error_sender.send(UpdateResult::default()).unwrap();
-                popup_sender
-                    .send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
-                        String::from("Error from Standings"),
-                        format!("{err:#}"),
-                    )))
-                    .unwrap();
+                error_sender.send(UpdateResult::default());
+                popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                    String::from("Error from Standings"),
+                    format!("{err:#}"),
+                )));
             }
         });
         self

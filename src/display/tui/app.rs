@@ -1,3 +1,4 @@
+#![allow(unused_must_use)]
 use std::io::{self, Stdout};
 
 use color_eyre::Result;
@@ -26,7 +27,7 @@ pub struct App {
 
 impl Drop for App {
     fn drop(&mut self) {
-        self.exit().unwrap();
+        self.exit();
     }
 }
 

@@ -18,14 +18,34 @@ pub struct CFTemplate {
     pub alias: String,
     pub lang: String,
     pub path: PathBuf,
-    pub ext: String,
+}
+
+impl From<CFCommand> for CFScripts {
+    fn from(command: CFCommand) -> Self {
+        Self {
+            before_script: Some(command.before_command),
+            script: command.command,
+            after_script: Some(command.after_command),
+            open_script: Some(command.open_command),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Scripts {
+pub struct CFCommand {
+    pub ext: String,
+    pub before_command: String,
+    pub command: String,
+    pub after_command: String,
+    pub open_command: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct CFScripts {
     pub before_script: Option<String>,
     pub script: String,
     pub after_script: Option<String>,
+    pub open_script: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -34,7 +54,7 @@ pub struct CFSettings {
     pub key: Option<String>,
     pub secret: Option<String>,
     pub templates: Option<Vec<CFTemplate>>,
-    pub commands: Option<HashMap<String, Scripts>>,
+    pub commands: Option<HashMap<String, CFScripts>>,
     pub home_dir: Option<PathBuf>,
 }
 

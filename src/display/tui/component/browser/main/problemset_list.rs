@@ -1,3 +1,4 @@
+#![allow(unused_must_use)]
 use color_eyre::{eyre::eyre, Result};
 
 use lazy_static::lazy_static;
@@ -124,7 +125,7 @@ async fn update(sender: mpsc::Sender<UpdateResult>) -> Result<()> {
         .into_iter()
         .map(|problem| format_item(problem))
         .collect();
-    sender.send(UpdateResult { problems, items }).unwrap();
+    sender.send(UpdateResult { problems, items });
     Ok(())
 }
 
@@ -162,13 +163,11 @@ impl ProblemsetList {
         self.updating += 1;
         tokio::spawn(async move {
             if let Err(err) = update(update_sender).await {
-                error_sender.send(UpdateResult::default()).unwrap();
-                popup_sender
-                    .send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
-                        String::from("Error from ProblemSet"),
-                        format!("{err:#}"),
-                    )))
-                    .unwrap();
+                error_sender.send(UpdateResult::default());
+                popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                    String::from("Error from ProblemSet"),
+                    format!("{err:#}"),
+                )));
             }
         });
         self

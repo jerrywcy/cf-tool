@@ -17,6 +17,7 @@ path = "src/bin/cf-tui.rs"
 anyhow = "1.0.66"
 bytesize = "1.1.0"
 chrono = "0.4.23"
+clap = { version = "4.0.29", features = ["cargo", "derive"] }
 color-eyre = "0.6.2"
 config = { version = "0.13.3", features = ["json"] }
 crossterm = { version = "0.25.0", features = ["event-stream"] }

@@ -1,25 +1,17 @@
-use std::{sync::mpsc};
+use std::sync::mpsc;
 
-use color_eyre::{Result};
+use color_eyre::Result;
 
+use tuirealm::{tui::layout::Rect, Frame};
 
-
-
-use tuirealm::{
-    tui::layout::Rect,
-    Frame,
-};
-
-use crate::{
-    display::tui::{
-        base_component::Paragraph,
-        component::ComponentSender,
-        event::AppEvent,
-        msg::{ChannelHandler, ComponentMsg},
-        types::{Text, TextSpans},
-        utils::{is_down_key, is_scroll_down, is_scroll_up, is_up_key},
-        BaseComponent, Component,
-    },
+use crate::display::tui::{
+    base_component::Paragraph,
+    component::ComponentSender,
+    event::AppEvent,
+    msg::{ChannelHandler, ComponentMsg},
+    types::{Text, TextSpans},
+    utils::{is_down_key, is_scroll_down, is_scroll_up, is_up_key},
+    BaseComponent, Component,
 };
 
 pub enum ContentUpdateCmd {

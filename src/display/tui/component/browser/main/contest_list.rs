@@ -1,3 +1,4 @@
+#![allow(unused_must_use)]
 use std::time::Duration;
 
 use chrono::prelude::*;
@@ -139,7 +140,7 @@ async fn update(sender: mpsc::Sender<UpdateResult>) -> Result<()> {
         .into_iter()
         .map(|contest| format_item(contest))
         .collect();
-    sender.send(UpdateResult { contests, items }).unwrap();
+    sender.send(UpdateResult { contests, items });
     Ok(())
 }
 
@@ -177,13 +178,11 @@ impl ContestList {
         self.updating += 1;
         tokio::spawn(async move {
             if let Err(err) = update(update_sender).await {
-                error_sender.send(UpdateResult::default()).unwrap();
-                popup_sender
-                    .send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
-                        String::from("Error from Contest"),
-                        format!("{err:#}"),
-                    )))
-                    .unwrap();
+                error_sender.send(UpdateResult::default());
+                popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                    String::from("Error from Contest"),
+                    format!("{err:#}"),
+                )));
             }
         });
         self

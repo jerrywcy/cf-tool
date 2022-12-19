@@ -1,3 +1,4 @@
+#![allow(unused_must_use)]
 use crossterm::event::{Event as CrosstermEvent, EventStream, KeyEvent, MouseEvent};
 use std::{
     sync::mpsc::{self, RecvError},
@@ -36,7 +37,7 @@ impl EventListener {
                     let delay = sleep(tick_rate);
                     let event = reader.next();
                     select! {
-                        _ = delay => {sender.send(AppEvent::Tick).unwrap();},
+                        _ = delay => {sender.send(AppEvent::Tick);},
                         maybe_event = event => {
                             match maybe_event {
                                 Some(Ok(event)) => {
@@ -49,7 +50,7 @@ impl EventListener {
                                         CrosstermEvent::Resize(width, height) =>
                                             sender.send(AppEvent::WindowResize(width, height))
 
-                                    }.unwrap();
+                                    };
                                 },
                                 Some(Err(_err)) => {},
                                 None => {break;},

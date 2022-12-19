@@ -154,6 +154,7 @@ dependencies = [
  "anyhow",
  "bytesize",
  "chrono",
+ "clap",
  "color-eyre",
  "config",
  "crossterm",

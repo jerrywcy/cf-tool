@@ -1,8 +1,9 @@
+#![allow(unused_must_use)]
 use std::{
     collections::HashMap,
     ffi::OsString,
     fs::{self, read_dir, read_to_string, write, DirBuilder},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Stdio,
     time::Duration,
 };
@@ -49,7 +50,7 @@ use crate::{
         view::get_chunk_with_ratio,
         BaseComponent, Component,
     },
-    settings::{CFTemplate, Scripts, SETTINGS},
+    settings::{CFScripts, CFTemplate, SETTINGS},
 };
 
 #[derive(Debug, Default)]
@@ -104,7 +105,7 @@ fn get_test_cases(path: &PathBuf) -> Vec<TestCase> {
     return test_cases;
 }
 
-fn get_file_path_and_scripts(path: &PathBuf, file_name: &str) -> Result<(PathBuf, Scripts)> {
+fn get_file_path_and_scripts(path: &PathBuf, file_name: &str) -> Result<(PathBuf, CFScripts)> {
     for entry in read_dir(path)? {
         if let Ok(file) = entry {
             let file_path = file.path();
@@ -139,10 +140,6 @@ async fn test(
     test_case: TestCase,
     test_commands: TestCommands,
 ) -> Result<()> {
-    if let Some(mut command) = test_commands.before_command {
-        command.spawn()?.wait().await?;
-    }
-
     let mut command = test_commands.command;
     let mut child = command
         .stdin(Stdio::piped())
@@ -207,7 +204,7 @@ fn get_command(full_path: &PathBuf, script: &str) -> Result<Command> {
     Ok(command)
 }
 
-fn get_commands(file_path: &PathBuf, scripts: Scripts) -> Result<TestCommands> {
+fn get_commands(file_path: &PathBuf, scripts: CFScripts) -> Result<TestCommands> {
     let before_command = match &scripts.before_script {
         Some(script) => Some(get_command(&file_path, script)?),
         None => None,
@@ -421,8 +418,13 @@ async fn update(sender: mpsc::Sender<UpdateResult>, contest_id: i32) -> Result<(
             .collect::<Vec<Text>>()
         })
         .collect();
-    sender.send(UpdateResult { problems, items }).unwrap();
+    sender.send(UpdateResult { problems, items });
 
+    Ok(())
+}
+
+async fn run_command(command: &mut Command) -> Result<()> {
+    command.spawn()?.wait().await?;
     Ok(())
 }
 
@@ -466,13 +468,11 @@ impl ProblemsList {
         let contest_id = self.contest.id;
         tokio::spawn(async move {
             if let Err(err) = update(update_sender, contest_id).await {
-                error_sender.send(UpdateResult::default()).unwrap();
-                popup_sender
-                    .send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
-                        String::from("Error from Problems"),
-                        format!("{err:#}"),
-                    )))
-                    .unwrap();
+                error_sender.send(UpdateResult::default());
+                popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                    String::from("Error from Problems"),
+                    format!("{err:#}"),
+                )));
             }
         });
         self
@@ -564,12 +564,16 @@ impl ProblemsList {
                 }
                 None => bail!("Configuration directory not defined"),
             };
-            let target_path = problem_dir.join(format!("{}.{}", &*problem_index, template.ext));
             let file_path = if !template.path.is_absolute() {
                 template_dir.join(&template.path)
             } else {
                 template.path.clone()
             };
+            let target_path = problem_dir.join(
+                Path::new(&*problem_index)
+                    .with_extension(file_path.extension().unwrap_or_default()),
+            );
+
             let current_date = chrono::Local::now();
             let content = read_to_string(file_path.clone())
                 .wrap_err(format!(
@@ -715,6 +719,25 @@ impl ProblemsList {
             .into();
         let update: UpdateFn = Box::new(move |update_sender, popup_sender| {
             tokio::spawn(async move {
+                let commands = match get_commands(&file_path, scripts.clone()) {
+                    Ok(commands) => commands,
+                    Err(err) => {
+                        popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                            "Error from Test".to_string(),
+                            format!("{err:?}"),
+                        )));
+                        return;
+                    }
+                };
+                if let Some(mut command) = commands.before_command {
+                    if let Err(err) = run_command(&mut command).await {
+                        popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                            "Error from Test: Before Command".to_string(),
+                            format!("{err:?}"),
+                        )));
+                        return;
+                    }
+                }
                 for (i, test_case) in test_cases.into_iter().enumerate() {
                     let update_sender = update_sender.clone();
                     let commands = match get_commands(&file_path, scripts.clone()) {
@@ -739,9 +762,19 @@ impl ProblemsList {
                     .await
                     {
                         popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
-                            "Error from Test".to_string(),
+                            "Error from Test: Command".to_string(),
                             format!("{err:?}"),
                         )));
+                        continue;
+                    }
+                }
+                if let Some(mut command) = commands.after_command {
+                    if let Err(err) = run_command(&mut command).await {
+                        popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                            "Error from Test: Before Command".to_string(),
+                            format!("{err:?}"),
+                        )));
+                        return;
                     }
                 }
             });
@@ -779,7 +812,7 @@ impl ProblemsList {
             .recursive(true)
             .create(&problem_dir)
             .wrap_err(open_dir_err)?;
-        let (file_path, scripts) = get_file_path_and_scripts(&problem_dir, &problem_index)?;
+        let (file_path, _scripts) = get_file_path_and_scripts(&problem_dir, &problem_index)?;
 
         let content = read_to_string(&file_path).wrap_err(format!(
             "Error occured when reading from {}",

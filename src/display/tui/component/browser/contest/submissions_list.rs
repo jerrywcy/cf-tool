@@ -1,3 +1,4 @@
+#![allow(unused_must_use)]
 use bytesize::ByteSize;
 use chrono::prelude::*;
 use color_eyre::{
@@ -178,7 +179,7 @@ async fn update(sender: mpsc::Sender<UpdateResult>, contest_id: i32) -> Result<(
         })
         .collect();
 
-    sender.send(UpdateResult { items, submissions }).unwrap();
+    sender.send(UpdateResult { items, submissions });
     Ok(())
 }
 
@@ -223,13 +224,11 @@ impl SubmissionsList {
 
         tokio::spawn(async move {
             if let Err(err) = update(update_sender, contest_id).await {
-                error_sender.send(UpdateResult::default()).unwrap();
-                popup_sender
-                    .send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
-                        String::from("Error from Submission"),
-                        format!("{err:#}"),
-                    )))
-                    .unwrap();
+                error_sender.send(UpdateResult::default());
+                popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                    String::from("Error from Submission"),
+                    format!("{err:#}"),
+                )));
             }
         });
         self

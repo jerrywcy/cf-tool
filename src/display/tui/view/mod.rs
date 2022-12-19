@@ -16,11 +16,6 @@ pub trait View {
     fn handle_event(&mut self, event: &AppEvent) -> Result<()>;
     fn tick(&mut self) {}
     fn is_fullscreen(&self) -> bool;
-    fn on_exit(self)
-    where
-        Self: Sized,
-    {
-    }
 }
 
 pub type ViewSender = mpsc::Sender<ViewMsg>;

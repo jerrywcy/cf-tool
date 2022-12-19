@@ -46,8 +46,6 @@ impl View for SelectPopupView {
         Ok(())
     }
 
-    fn on_exit(self) {}
-
     fn is_fullscreen(&self) -> bool {
         false
     }
