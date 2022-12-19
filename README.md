@@ -33,19 +33,21 @@ Then enjoy cf-tool!
 
 ## Screenshots
 
-![](assets/Pasted image 20221218172037.png)
+![image](https://user-images.githubusercontent.com/34678939/208440257-7548a317-7198-40c8-8bae-e6b150f08c8d.png)
 
-![](assets/Pasted image 20221218172516.png)
+![Pasted image 20221218172037](https://user-images.githubusercontent.com/34678939/208440843-434d02b1-8632-4b4b-9962-eee75b251dc7.png)
 
-![](assets/Pasted image 20221218172531.png)
+![Pasted image 20221218172516](https://user-images.githubusercontent.com/34678939/208440891-5c5a96bb-ea3d-4be5-b3ad-1bcee02bb0c2.png)
 
-![](assets/Pasted image 20221218172556.png)
+![Pasted image 20221218172531](https://user-images.githubusercontent.com/34678939/208440927-352723ca-70f6-4f96-90f1-11ee57af2a46.png)
 
-![](assets/Pasted image 20221218172717.png)
+![Pasted image 20221218172556](https://user-images.githubusercontent.com/34678939/208440953-3f351e0d-6c1f-44dc-bd24-189df0d02aec.png)
 
-![](assets/Pasted image 20221218172947.png)
+![Pasted image 20221218172717](https://user-images.githubusercontent.com/34678939/208440971-02219835-8457-420d-ac91-fa8e9df9fcbe.png)
 
-![](assets/Pasted image 20221218173001.png)
+![Pasted image 20221218172947](https://user-images.githubusercontent.com/34678939/208440995-9efb84ca-a73c-462e-80ae-49daa1e45e8b.png)
+
+![Pasted image 20221218173001](https://user-images.githubusercontent.com/34678939/208441011-701c181a-ed0f-4a5e-ab5d-d1714da0f047.png)
 
 ## Usage
 
