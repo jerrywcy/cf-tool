@@ -87,6 +87,10 @@ fn is_submit_key(evt: &KeyEvent) -> bool {
     is_key(evt, KeyCode::Char('s'), KeyModifiers::NONE)
 }
 
+fn is_open_key(evt: &KeyEvent) -> bool {
+    is_key(evt, KeyCode::Char('o'), KeyModifiers::NONE)
+}
+
 fn get_test_cases(path: &PathBuf) -> Vec<TestCase> {
     let mut i = 1;
     let mut test_cases = vec![];
@@ -185,7 +189,7 @@ static PATH_PLACE_HOLDER: &str = "<% path %>";
 static FILE_PLACE_HOLDER: &str = "<% file %>";
 
 fn get_command(full_path: &PathBuf, script: &str) -> Result<Command> {
-    let _full = full_path.display().to_string();
+    let full = full_path.display().to_string();
     let path = full_path
         .parent()
         .ok_or(eyre!("Code file has no parent!"))?
@@ -196,9 +200,10 @@ fn get_command(full_path: &PathBuf, script: &str) -> Result<Command> {
         .ok_or(eyre!("Code file has no file stem!"))?
         .to_string_lossy();
     let script = script
-        .replace(FULL_PATH_PLACE_HOLDER, &full_path.display().to_string())
+        .replace(FULL_PATH_PLACE_HOLDER, &full)
         .replace(PATH_PLACE_HOLDER, &path)
         .replace(FILE_PLACE_HOLDER, &file);
+    println!("{}", script);
     let mut command = Command::from(execute::command(script));
     command.current_dir(path);
     Ok(command)
@@ -219,6 +224,15 @@ fn get_commands(file_path: &PathBuf, scripts: CFScripts) -> Result<TestCommands>
         command,
         after_command,
     })
+}
+
+fn get_open_command(file_path: &PathBuf, scripts: CFScripts) -> Result<Option<Command>> {
+    let open_command = match &scripts.open_script {
+        Some(script) => Some(get_command(&file_path, script)?),
+        None => None,
+    };
+
+    Ok(open_command)
 }
 
 async fn parse(
@@ -334,6 +348,7 @@ impl Component for ProblemsList {
             AppEvent::Key(evt) if is_test_key(evt) => self.test()?,
             AppEvent::Key(evt) if is_generate_key(evt) => self.generate()?,
             AppEvent::Key(evt) if is_submit_key(evt) => self.submit()?,
+            AppEvent::Key(evt) if is_open_key(evt) => self.open()?,
             _ => (),
         }
         Ok(())
@@ -786,6 +801,59 @@ impl ProblemsList {
             TextSpans::from(format!("Test for Problem {problem_index}")),
             texts,
         )))?;
+        Ok(())
+    }
+
+    fn open(&mut self) -> Result<()> {
+        let home_dir = SETTINGS.home_dir.clone().ok_or(NoConfigItemError {
+            item: "home_dir".to_string(),
+        })?;
+        let contest_id = self.contest.id;
+        let index = self.component.selected();
+        let problem = self.problems.get(index).ok_or(eyre!(
+            "No such index: {index}\nCommonly this is a problem of the application."
+        ))?;
+        let problem_index = problem.index.clone();
+        let problem_dir = home_dir
+            .join("Contests")
+            .join(contest_id.to_string())
+            .join(&problem_index);
+
+        let open_dir_err = eyre!(
+            "Failed to open directory when trying to test problem: {}",
+            problem_dir.display()
+        );
+        DirBuilder::new()
+            .recursive(true)
+            .create(&problem_dir)
+            .wrap_err(open_dir_err)?;
+
+        let (file_path, scripts) = get_file_path_and_scripts(&problem_dir, &problem_index)?;
+        println!("{:?}", file_path);
+
+        let popup_sender = self.sender.clone();
+        futures::executor::block_on(async move {
+            let open_command = match get_open_command(&file_path, scripts.clone()) {
+                Ok(commands) => commands,
+                Err(err) => {
+                    popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                        "Error when opening file".to_string(),
+                        format!("{err:?}"),
+                    )));
+                    return;
+                }
+            };
+            if let Some(mut command) = open_command {
+                if let Err(err) = run_command(&mut command).await {
+                    popup_sender.send(ComponentMsg::EnterNewView(ViewConstructor::ErrorPopup(
+                        "Error when opening file".to_string(),
+                        format!("{err:?}"),
+                    )));
+                    return;
+                }
+            }
+        });
+
         Ok(())
     }
 
